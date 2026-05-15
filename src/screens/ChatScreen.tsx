@@ -3,10 +3,10 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
   StyleSheet,
   Text,
   TextInput,
@@ -37,15 +37,15 @@ const SUBJECT_COLORS: Record<string, string> = {
   English: '#D97706',
 };
 
-const CHAT_HISTORY_KEY = (subject: string) => `edureach:chat:${subject}`;
+const CHAT_HISTORY_KEY = (subject: string, grade: number) =>
+  `edureach:chat:${subject}:grade${grade}`;
 
 function formatTime(timestamp: number): string {
   const date = new Date(timestamp);
   const hours = date.getHours();
   const minutes = date.getMinutes().toString().padStart(2, '0');
   const ampm = hours >= 12 ? 'PM' : 'AM';
-  const displayHour = hours % 12 || 12;
-  return `${displayHour}:${minutes} ${ampm}`;
+  return `${hours % 12 || 12}:${minutes} ${ampm}`;
 }
 
 function buildGemmaHistory(messages: Message[]): GemmaMessage[] {
@@ -58,9 +58,10 @@ function buildGemmaHistory(messages: Message[]): GemmaMessage[] {
 }
 
 export function ChatScreen({ navigation, route }: Props) {
-  const { subject } = route.params;
+  const { subject, grade } = route.params;
   const accentColor = SUBJECT_COLORS[subject] ?? '#7C3AED';
   const { isOnline } = useNetworkStatus();
+  const storageKey = CHAT_HISTORY_KEY(subject, grade);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -69,36 +70,43 @@ export function ChatScreen({ navigation, route }: Props) {
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem(CHAT_HISTORY_KEY(subject)).then((raw) => {
+    AsyncStorage.getItem(storageKey).then((raw) => {
       if (raw) setMessages(JSON.parse(raw));
     });
     getQueue().then((q) =>
       setQueueLength(q.filter((item) => item.subject === subject).length),
     );
-  }, [subject]);
+  }, [storageKey, subject]);
 
   useEffect(() => {
     if (messages.length > 0) {
-      AsyncStorage.setItem(CHAT_HISTORY_KEY(subject), JSON.stringify(messages));
+      AsyncStorage.setItem(storageKey, JSON.stringify(messages));
     }
-  }, [messages, subject]);
+  }, [messages, storageKey]);
 
   // Flush offline queue when back online
   useEffect(() => {
     if (!isOnline) return;
     (async () => {
       const queue = await getQueue();
-      const subjectQueue = queue.filter((q) => q.subject === subject);
+      const subjectQueue = queue.filter(
+        (q) => q.subject === subject && q.grade === grade,
+      );
       if (subjectQueue.length === 0) return;
 
       for (const item of subjectQueue) {
+        // Mark as no longer pending in UI
         setMessages((prev) =>
           prev.map((m) => (m.id === item.id ? { ...m, pending: false } : m)),
         );
         try {
-          const currentMessages = messages.filter((m) => !m.pending);
-          const history = buildGemmaHistory(currentMessages);
-          const answer = await askGemma(subject, history, item.question);
+          // Use the history snapshot captured at queue time for correct context
+          const answer = await askGemma(
+            subject,
+            grade,
+            item.historySnapshot,
+            item.question,
+          );
           const assistantMsg: Message = {
             id: `${item.id}-reply`,
             role: 'assistant',
@@ -106,10 +114,12 @@ export function ChatScreen({ navigation, route }: Props) {
             timestamp: Date.now(),
           };
           setMessages((prev) => [...prev, assistantMsg]);
+          // Only remove from queue after successful answer — handles app-kill edge case
           await removeFromQueue(item.id);
           setQueueLength((n) => Math.max(0, n - 1));
         } catch (e) {
           console.warn('Failed to flush queued item:', e);
+          // Leave in queue — will retry next time online
         }
       }
     })();
@@ -117,59 +127,13 @@ export function ChatScreen({ navigation, route }: Props) {
   }, [isOnline]);
 
   const clearHistory = useCallback(async () => {
-    await AsyncStorage.removeItem(CHAT_HISTORY_KEY(subject));
+    await AsyncStorage.removeItem(storageKey);
     setMessages([]);
-  }, [subject]);
+  }, [storageKey]);
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
-    if (!text || isLoading) return;
-    setInput('');
-
-    const userMsg: Message = {
-      id: `${Date.now()}`,
-      role: 'user',
-      content: text,
-      timestamp: Date.now(),
-      pending: !isOnline,
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    await recordQuestion(subject, text);
-
-    if (!isOnline) {
-      await enqueueQuestion(subject, text);
-      setQueueLength((n) => n + 1);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const history = buildGemmaHistory(messages);
-      const answer = await askGemma(subject, history, text);
-      const assistantMsg: Message = {
-        id: `${Date.now()}-reply`,
-        role: 'assistant',
-        content: answer,
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch (err) {
-      const errMsg: Message = {
-        id: `${Date.now()}-err`,
-        role: 'assistant',
-        content: "Sorry, I couldn't connect right now. Try again in a moment!",
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, errMsg]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [input, isLoading, isOnline, messages, subject]);
-
-  // Set header with online status dot + clear button
   useEffect(() => {
     navigation.setOptions({
+      title: `Grade ${grade} ${subject}`,
       headerRight: () => (
         <View style={styles.headerRight}>
           <View
@@ -192,7 +156,58 @@ export function ChatScreen({ navigation, route }: Props) {
         </View>
       ),
     });
-  }, [navigation, isOnline, clearHistory]);
+  }, [navigation, isOnline, clearHistory, grade, subject]);
+
+  const sendMessage = useCallback(async () => {
+    const text = input.trim();
+    if (!text || isLoading) return;
+    setInput('');
+
+    const userMsg: Message = {
+      id: `${Date.now()}`,
+      role: 'user',
+      content: text,
+      timestamp: Date.now(),
+      pending: !isOnline,
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    await recordQuestion(subject, text);
+
+    if (!isOnline) {
+      // Capture history snapshot at queue time for correct context on flush
+      const historySnapshot = buildGemmaHistory(messages);
+      await enqueueQuestion(subject, grade, text, historySnapshot);
+      setQueueLength((n) => n + 1);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const history = buildGemmaHistory(messages);
+      const answer = await askGemma(subject, grade, history, text);
+      const assistantMsg: Message = {
+        id: `${Date.now()}-reply`,
+        role: 'assistant',
+        content: answer,
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-err`,
+          role: 'assistant',
+          content:
+            "Sorry, I couldn't connect right now. Try again in a moment!",
+          timestamp: Date.now(),
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [input, isLoading, isOnline, messages, subject, grade]);
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isUser = item.role === 'user';
@@ -232,7 +247,6 @@ export function ChatScreen({ navigation, route }: Props) {
             )}
           </View>
         </View>
-        {/* Timestamp below bubble */}
         <Text
           style={[
             styles.timestamp,
@@ -249,47 +263,49 @@ export function ChatScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       {!isOnline && <OfflineBanner queueLength={queueLength} />}
 
-      <FlatList
-        ref={listRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessage}
-        contentContainerStyle={styles.list}
-        onContentSizeChange={() =>
-          listRef.current?.scrollToEnd({ animated: true })
-        }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>👋</Text>
-            <Text style={styles.emptyTitle}>
-              Ask me anything about {subject}!
-            </Text>
-            <Text style={styles.emptySubtitle}>
-              I'll explain it simply, step by step.
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMessage}
+          contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps='handled'
+          onContentSizeChange={() =>
+            listRef.current?.scrollToEnd({ animated: true })
+          }
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyEmoji}>👋</Text>
+              <Text style={styles.emptyTitle}>
+                Ask me anything about {subject}!
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                I'll explain it step by step for Grade {grade}.
+              </Text>
+            </View>
+          }
+        />
+
+        {isLoading && (
+          <View style={styles.typingRow}>
+            <ActivityIndicator size='small' color={accentColor} />
+            <Text style={[styles.typingText, { color: accentColor }]}>
+              Thinking...
             </Text>
           </View>
-        }
-      />
+        )}
 
-      {isLoading && (
-        <View style={styles.typingRow}>
-          <ActivityIndicator size='small' color={accentColor} />
-          <Text style={[styles.typingText, { color: accentColor }]}>
-            Thinking...
-          </Text>
-        </View>
-      )}
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
-      >
         <View style={styles.inputRow}>
           <TextInput
             style={styles.input}
             value={input}
             onChangeText={setInput}
-            placeholder={`Ask a ${subject} question…`}
+            placeholder={`Ask a Grade ${grade} ${subject} question…`}
             placeholderTextColor='#A8A29E'
             multiline
             maxLength={400}
@@ -317,7 +333,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FAFAF9' },
   list: { padding: 16, paddingBottom: 8, gap: 4 },
 
-  // Header
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -334,7 +349,6 @@ const styles = StyleSheet.create({
   },
   clearBtnText: { fontSize: 12, color: '#78716C', fontWeight: '500' },
 
-  // Message layout
   messageGroup: { marginBottom: 8 },
   messageGroupUser: { alignItems: 'flex-end' },
   messageGroupAssistant: { alignItems: 'flex-start' },
@@ -372,7 +386,6 @@ const styles = StyleSheet.create({
   bubbleTextUser: { fontSize: 15, color: '#FFFFFF', lineHeight: 22 },
   pendingLabel: { fontSize: 11, color: '#FBBF24', marginTop: 4 },
 
-  // Timestamps
   timestamp: {
     fontSize: 11,
     color: '#A8A29E',
@@ -382,7 +395,6 @@ const styles = StyleSheet.create({
   timestampUser: { textAlign: 'right' },
   timestampAssistant: { marginLeft: 40, textAlign: 'left' },
 
-  // Typing indicator
   typingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -392,7 +404,6 @@ const styles = StyleSheet.create({
   },
   typingText: { fontSize: 13, fontWeight: '500' },
 
-  // Input
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -425,7 +436,6 @@ const styles = StyleSheet.create({
   sendBtnDisabled: { opacity: 0.4 },
   sendIcon: { color: '#fff', fontSize: 20, fontWeight: '700' },
 
-  // Empty state
   empty: { flex: 1, alignItems: 'center', paddingTop: 80, gap: 8 },
   emptyEmoji: { fontSize: 48 },
   emptyTitle: { fontSize: 18, fontWeight: '600', color: '#1C1917' },
