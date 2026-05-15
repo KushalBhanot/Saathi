@@ -2,6 +2,16 @@ export type Subject = 'Math' | 'Science' | 'English';
 
 export type Grade = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
+export type ModelQuality = 'fast' | 'smart' | 'expert';
+
+export type Language =
+  | 'English'
+  | 'Hindi'
+  | 'Spanish'
+  | 'Swahili'
+  | 'French'
+  | 'Bengali';
+
 export type MessageRole = 'user' | 'assistant';
 
 export interface Message {
@@ -10,6 +20,7 @@ export interface Message {
   content: string;
   timestamp: number;
   pending?: boolean;
+  thinking?: string;
 }
 
 export interface QueuedQuestion {
@@ -30,5 +41,10 @@ export interface ProgressEntry {
 
 export type RootStackParamList = {
   SubjectPicker: undefined;
-  Chat: { subject: Subject; grade: Grade };
+  Chat: {
+    subject: Subject;
+    grade: Grade;
+    model: ModelQuality;
+    language: Language;
+  };
 };

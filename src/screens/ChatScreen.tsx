@@ -3,21 +3,30 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  Clipboard,
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SimpleMarkdown } from '../components/SimpleMarkdown';
 import { OfflineBanner } from '../components/OfflineBanner';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
-import { GemmaMessage, askGemma } from '../services/gemmaService';
+import {
+  GemmaMessage,
+  MODEL_CONFIG,
+  LANGUAGE_CONFIG,
+  askGemma,
+} from '../services/gemmaService';
 import {
   enqueueQuestion,
   getQueue,
@@ -40,12 +49,11 @@ const SUBJECT_COLORS: Record<string, string> = {
 const CHAT_HISTORY_KEY = (subject: string, grade: number) =>
   `edureach:chat:${subject}:grade${grade}`;
 
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const hours = date.getHours();
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  return `${hours % 12 || 12}:${minutes} ${ampm}`;
+function formatTime(ts: number): string {
+  const d = new Date(ts);
+  const h = d.getHours(),
+    m = d.getMinutes().toString().padStart(2, '0');
+  return `${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
 function buildGemmaHistory(messages: Message[]): GemmaMessage[] {
@@ -58,15 +66,21 @@ function buildGemmaHistory(messages: Message[]): GemmaMessage[] {
 }
 
 export function ChatScreen({ navigation, route }: Props) {
-  const { subject, grade } = route.params;
+  const { subject, grade, model, language } = route.params;
   const accentColor = SUBJECT_COLORS[subject] ?? '#7C3AED';
   const { isOnline } = useNetworkStatus();
   const storageKey = CHAT_HISTORY_KEY(subject, grade);
+  const isGemmaModel = MODEL_CONFIG[model].isGemma;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [queueLength, setQueueLength] = useState(0);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deepThinking, setDeepThinking] = useState(false);
+  const [expandedThinking, setExpandedThinking] = useState<
+    Record<string, boolean>
+  >({});
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -74,17 +88,15 @@ export function ChatScreen({ navigation, route }: Props) {
       if (raw) setMessages(JSON.parse(raw));
     });
     getQueue().then((q) =>
-      setQueueLength(q.filter((item) => item.subject === subject).length),
+      setQueueLength(q.filter((i) => i.subject === subject).length),
     );
   }, [storageKey, subject]);
 
   useEffect(() => {
-    if (messages.length > 0) {
+    if (messages.length > 0)
       AsyncStorage.setItem(storageKey, JSON.stringify(messages));
-    }
   }, [messages, storageKey]);
 
-  // Flush offline queue when back online
   useEffect(() => {
     if (!isOnline) return;
     (async () => {
@@ -92,34 +104,34 @@ export function ChatScreen({ navigation, route }: Props) {
       const subjectQueue = queue.filter(
         (q) => q.subject === subject && q.grade === grade,
       );
-      if (subjectQueue.length === 0) return;
-
+      if (!subjectQueue.length) return;
       for (const item of subjectQueue) {
-        // Mark as no longer pending in UI
         setMessages((prev) =>
           prev.map((m) => (m.id === item.id ? { ...m, pending: false } : m)),
         );
         try {
-          // Use the history snapshot captured at queue time for correct context
-          const answer = await askGemma(
+          const parsed = await askGemma(
             subject,
             grade,
+            language,
+            model,
             item.historySnapshot,
             item.question,
           );
-          const assistantMsg: Message = {
-            id: `${item.id}-reply`,
-            role: 'assistant',
-            content: answer,
-            timestamp: Date.now(),
-          };
-          setMessages((prev) => [...prev, assistantMsg]);
-          // Only remove from queue after successful answer — handles app-kill edge case
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: item.id + '-reply',
+              role: 'assistant',
+              content: parsed.answer,
+              thinking: parsed.thinking ?? undefined,
+              timestamp: Date.now(),
+            },
+          ]);
           await removeFromQueue(item.id);
           setQueueLength((n) => Math.max(0, n - 1));
         } catch (e) {
-          console.warn('Failed to flush queued item:', e);
-          // Leave in queue — will retry next time online
+          console.warn('Flush failed:', e);
         }
       }
     })();
@@ -127,36 +139,105 @@ export function ChatScreen({ navigation, route }: Props) {
   }, [isOnline]);
 
   const clearHistory = useCallback(async () => {
-    await AsyncStorage.removeItem(storageKey);
-    setMessages([]);
+    Alert.alert('Clear chat?', 'This will delete all messages in this chat.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: async () => {
+          await AsyncStorage.removeItem(storageKey);
+          setMessages([]);
+        },
+      },
+    ]);
   }, [storageKey]);
+
+  const copyToClipboard = useCallback((text: string, id: string) => {
+    Clipboard.setString(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  }, []);
+
+  const explainDifferently = useCallback(async () => {
+    if (isLoading || !isOnline) return;
+    setIsLoading(true);
+    try {
+      const history = buildGemmaHistory(messages);
+      const parsed = await askGemma(
+        subject,
+        grade,
+        language,
+        model,
+        history,
+        'Please explain that differently using a different example or analogy.',
+        deepThinking,
+      );
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + '-re',
+          role: 'assistant',
+          content: parsed.answer,
+          thinking: parsed.thinking ?? undefined,
+          timestamp: Date.now(),
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [
+    isLoading,
+    isOnline,
+    messages,
+    subject,
+    grade,
+    language,
+    model,
+    deepThinking,
+  ]);
 
   useEffect(() => {
     navigation.setOptions({
-      title: `Grade ${grade} ${subject}`,
+      title: `G${grade} · ${subject}`,
       headerRight: () => (
         <View style={styles.headerRight}>
+          <Text style={styles.headerBadge}>
+            {MODEL_CONFIG[model].emoji}
+            {LANGUAGE_CONFIG[language].flag}
+          </Text>
+          {isGemmaModel && (
+            <Switch
+              value={deepThinking}
+              onValueChange={setDeepThinking}
+              trackColor={{ false: '#E7E5E4', true: accentColor + '80' }}
+              thumbColor={deepThinking ? accentColor : '#A8A29E'}
+              style={{ transform: [{ scaleX: 0.7 }, { scaleY: 0.7 }] }}
+            />
+          )}
           <View
             style={[
               styles.statusDot,
               { backgroundColor: isOnline ? '#10B981' : '#F59E0B' },
             ]}
           />
-          <Text
-            style={[
-              styles.statusText,
-              { color: isOnline ? '#10B981' : '#F59E0B' },
-            ]}
-          >
-            {isOnline ? 'Online' : 'Offline'}
-          </Text>
           <TouchableOpacity onPress={clearHistory} style={styles.clearBtn}>
             <Text style={styles.clearBtnText}>Clear</Text>
           </TouchableOpacity>
         </View>
       ),
     });
-  }, [navigation, isOnline, clearHistory, grade, subject]);
+  }, [
+    navigation,
+    isOnline,
+    clearHistory,
+    grade,
+    subject,
+    model,
+    language,
+    deepThinking,
+    accentColor,
+    isGemmaModel,
+  ]);
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
@@ -170,12 +251,10 @@ export function ChatScreen({ navigation, route }: Props) {
       timestamp: Date.now(),
       pending: !isOnline,
     };
-
     setMessages((prev) => [...prev, userMsg]);
     await recordQuestion(subject, text);
 
     if (!isOnline) {
-      // Capture history snapshot at queue time for correct context on flush
       const historySnapshot = buildGemmaHistory(messages);
       await enqueueQuestion(subject, grade, text, historySnapshot);
       setQueueLength((n) => n + 1);
@@ -185,15 +264,26 @@ export function ChatScreen({ navigation, route }: Props) {
     setIsLoading(true);
     try {
       const history = buildGemmaHistory(messages);
-      const answer = await askGemma(subject, grade, history, text);
-      const assistantMsg: Message = {
-        id: `${Date.now()}-reply`,
-        role: 'assistant',
-        content: answer,
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch (err) {
+      const parsed = await askGemma(
+        subject,
+        grade,
+        language,
+        model,
+        history,
+        text,
+        deepThinking,
+      );
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-reply`,
+          role: 'assistant',
+          content: parsed.answer,
+          thinking: parsed.thinking ?? undefined,
+          timestamp: Date.now(),
+        },
+      ]);
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
@@ -207,10 +297,25 @@ export function ChatScreen({ navigation, route }: Props) {
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, isOnline, messages, subject, grade]);
+  }, [
+    input,
+    isLoading,
+    isOnline,
+    messages,
+    subject,
+    grade,
+    language,
+    model,
+    deepThinking,
+  ]);
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
     const isUser = item.role === 'user';
+    const isCopied = copiedId === item.id;
+    const isLastAssistant =
+      !isUser && messages.slice(index + 1).every((m) => m.role === 'user');
+    const isThinkingExpanded = expandedThinking[item.id] ?? false;
+
     return (
       <View
         style={[
@@ -226,35 +331,74 @@ export function ChatScreen({ navigation, route }: Props) {
               <Text style={styles.avatarText}>AI</Text>
             </View>
           )}
-          <View
-            style={[
-              styles.bubble,
-              isUser
-                ? [styles.bubbleUser, { backgroundColor: accentColor }]
-                : styles.bubbleAssistant,
-              item.pending && styles.bubblePending,
-            ]}
+          <TouchableWithoutFeedback
+            onLongPress={() => copyToClipboard(item.content, item.id)}
           >
-            {isUser ? (
-              <Text style={styles.bubbleTextUser}>{item.content}</Text>
-            ) : (
-              <SimpleMarkdown>{item.content}</SimpleMarkdown>
-            )}
-            {item.pending && (
-              <Text style={styles.pendingLabel}>
-                ⏳ Queued — will send when online
-              </Text>
-            )}
-          </View>
+            <View
+              style={[
+                styles.bubble,
+                isUser
+                  ? [styles.bubbleUser, { backgroundColor: accentColor }]
+                  : styles.bubbleAssistant,
+                item.pending && styles.bubblePending,
+                isCopied && styles.bubbleCopied,
+              ]}
+            >
+              {/* Deep thinking accordion */}
+              {item.thinking && (
+                <TouchableOpacity
+                  onPress={() =>
+                    setExpandedThinking((prev) => ({
+                      ...prev,
+                      [item.id]: !isThinkingExpanded,
+                    }))
+                  }
+                  style={styles.thinkingHeader}
+                >
+                  <Text style={styles.thinkingHeaderText}>
+                    {isThinkingExpanded ? '▾' : '▸'} Thinking process...
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {item.thinking && isThinkingExpanded && (
+                <View style={styles.thinkingBody}>
+                  <Text style={styles.thinkingBodyText}>{item.thinking}</Text>
+                </View>
+              )}
+
+              {isUser ? (
+                <Text style={styles.bubbleTextUser}>{item.content}</Text>
+              ) : (
+                <SimpleMarkdown>{item.content}</SimpleMarkdown>
+              )}
+              {item.pending && (
+                <Text style={styles.pendingLabel}>
+                  ⏳ Queued — will send when online
+                </Text>
+              )}
+              {isCopied && <Text style={styles.copiedLabel}>✓ Copied</Text>}
+            </View>
+          </TouchableWithoutFeedback>
         </View>
-        <Text
+
+        <View
           style={[
-            styles.timestamp,
-            isUser ? styles.timestampUser : styles.timestampAssistant,
+            styles.belowBubble,
+            isUser ? styles.belowBubbleUser : styles.belowBubbleAssistant,
           ]}
         >
-          {formatTime(item.timestamp)}
-        </Text>
+          <Text style={styles.timestamp}>{formatTime(item.timestamp)}</Text>
+          {isLastAssistant && !item.pending && (
+            <TouchableOpacity
+              onPress={explainDifferently}
+              style={styles.reExplainBtn}
+            >
+              <Text style={[styles.reExplainText, { color: accentColor }]}>
+                ↺ Explain differently
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   };
@@ -262,6 +406,20 @@ export function ChatScreen({ navigation, route }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       {!isOnline && <OfflineBanner queueLength={queueLength} />}
+
+      {/* Deep thinking banner */}
+      {deepThinking && isGemmaModel && (
+        <View
+          style={[
+            styles.deepThinkingBanner,
+            { backgroundColor: accentColor + '15' },
+          ]}
+        >
+          <Text style={[styles.deepThinkingText, { color: accentColor }]}>
+            🧩 Deep Thinking ON — tap ▸ on any response to see reasoning
+          </Text>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -285,7 +443,9 @@ export function ChatScreen({ navigation, route }: Props) {
                 Ask me anything about {subject}!
               </Text>
               <Text style={styles.emptySubtitle}>
-                I'll explain it step by step for Grade {grade}.
+                Grade {grade} · {MODEL_CONFIG[model].emoji}{' '}
+                {MODEL_CONFIG[model].label} · {LANGUAGE_CONFIG[language].flag}{' '}
+                {language}
               </Text>
             </View>
           }
@@ -295,7 +455,7 @@ export function ChatScreen({ navigation, route }: Props) {
           <View style={styles.typingRow}>
             <ActivityIndicator size='small' color={accentColor} />
             <Text style={[styles.typingText, { color: accentColor }]}>
-              Thinking...
+              {deepThinking ? 'Thinking deeply...' : 'Thinking...'}
             </Text>
           </View>
         )}
@@ -336,18 +496,25 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginRight: 4,
+    gap: 4,
+    marginRight: 2,
   },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  headerBadge: { fontSize: 16 },
+  thinkingToggle: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  thinkingLabel: { fontSize: 14 },
+  statusDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 2 },
   statusText: { fontSize: 12, fontWeight: '600' },
   clearBtn: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     backgroundColor: '#F5F5F4',
     borderRadius: 6,
+    marginLeft: 2,
   },
   clearBtnText: { fontSize: 12, color: '#78716C', fontWeight: '500' },
+
+  deepThinkingBanner: { paddingHorizontal: 16, paddingVertical: 8 },
+  deepThinkingText: { fontSize: 12, fontWeight: '500' },
 
   messageGroup: { marginBottom: 8 },
   messageGroupUser: { alignItems: 'flex-end' },
@@ -383,17 +550,55 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   bubblePending: { opacity: 0.65 },
+  bubbleCopied: { opacity: 0.75 },
   bubbleTextUser: { fontSize: 15, color: '#FFFFFF', lineHeight: 22 },
   pendingLabel: { fontSize: 11, color: '#FBBF24', marginTop: 4 },
-
-  timestamp: {
+  copiedLabel: {
     fontSize: 11,
-    color: '#A8A29E',
-    marginTop: 3,
-    marginHorizontal: 4,
+    color: '#10B981',
+    marginTop: 4,
+    fontWeight: '600',
   },
-  timestampUser: { textAlign: 'right' },
-  timestampAssistant: { marginLeft: 40, textAlign: 'left' },
+
+  // Deep thinking accordion
+  thinkingHeader: {
+    paddingVertical: 6,
+    marginBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0EDEC',
+  },
+  thinkingHeaderText: {
+    fontSize: 12,
+    color: '#A8A29E',
+    fontWeight: '600',
+    fontStyle: 'italic',
+  },
+  thinkingBody: {
+    backgroundColor: '#FAFAF9',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+  thinkingBodyText: {
+    fontSize: 12,
+    color: '#78716C',
+    lineHeight: 18,
+    fontStyle: 'italic',
+  },
+
+  belowBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 3,
+    paddingHorizontal: 4,
+  },
+  belowBubbleUser: { justifyContent: 'flex-end' },
+  belowBubbleAssistant: { marginLeft: 40 },
+
+  timestamp: { fontSize: 11, color: '#A8A29E' },
+  reExplainBtn: { paddingVertical: 2 },
+  reExplainText: { fontSize: 12, fontWeight: '600' },
 
   typingRow: {
     flexDirection: 'row',
@@ -439,5 +644,5 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', paddingTop: 80, gap: 8 },
   emptyEmoji: { fontSize: 48 },
   emptyTitle: { fontSize: 18, fontWeight: '600', color: '#1C1917' },
-  emptySubtitle: { fontSize: 14, color: '#78716C' },
+  emptySubtitle: { fontSize: 13, color: '#A8A29E' },
 });
