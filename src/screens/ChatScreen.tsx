@@ -40,6 +40,13 @@ type Props = {
   route: RouteProp<RootStackParamList, 'Chat'>;
 };
 
+// Map model IDs to short display labels for the message badge
+const MODEL_LABEL: Record<string, string> = {
+  'gemini-2.5-flash': '⚡ Fast',
+  'gemma-4-26b-a4b-it': '🧠 Smart',
+  'gemma-4-31b-it': '🏆 Expert',
+};
+
 const SUBJECT_COLORS: Record<string, string> = {
   Math: '#7C3AED',
   Science: '#059669',
@@ -125,6 +132,8 @@ export function ChatScreen({ navigation, route }: Props) {
               role: 'assistant',
               content: parsed.answer,
               thinking: parsed.thinking ?? undefined,
+              actualModel: parsed.actualModel,
+              usedFallback: parsed.usedFallback,
               timestamp: Date.now(),
             },
           ]);
@@ -179,6 +188,8 @@ export function ChatScreen({ navigation, route }: Props) {
           role: 'assistant',
           content: parsed.answer,
           thinking: parsed.thinking ?? undefined,
+          actualModel: parsed.actualModel,
+          usedFallback: parsed.usedFallback,
           timestamp: Date.now(),
         },
       ]);
@@ -280,6 +291,8 @@ export function ChatScreen({ navigation, route }: Props) {
           role: 'assistant',
           content: parsed.answer,
           thinking: parsed.thinking ?? undefined,
+          actualModel: parsed.actualModel,
+          usedFallback: parsed.usedFallback,
           timestamp: Date.now(),
         },
       ]);
@@ -359,6 +372,25 @@ export function ChatScreen({ navigation, route }: Props) {
                     {isThinkingExpanded ? '▾' : '▸'} Thinking process...
                   </Text>
                 </TouchableOpacity>
+              )}
+              {/* Model indicator — always shown on AI messages */}
+              {item.actualModel && (
+                <View
+                  style={[
+                    styles.modelBadge,
+                    item.usedFallback && styles.modelBadgeFallback,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.modelBadgeText,
+                      item.usedFallback && styles.modelBadgeTextFallback,
+                    ]}
+                  >
+                    {MODEL_LABEL[item.actualModel] ?? item.actualModel}
+                    {item.usedFallback ? ' (Expert unavailable)' : ''}
+                  </Text>
+                </View>
               )}
               {item.thinking && isThinkingExpanded && (
                 <View style={styles.thinkingBody}>
@@ -585,6 +617,17 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontStyle: 'italic',
   },
+  modelBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#F5F5F4',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    marginBottom: 6,
+  },
+  modelBadgeFallback: { backgroundColor: '#FEF3C7' },
+  modelBadgeText: { fontSize: 11, color: '#A8A29E', fontWeight: '500' },
+  modelBadgeTextFallback: { color: '#92400E' },
 
   belowBubble: {
     flexDirection: 'row',

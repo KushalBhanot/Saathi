@@ -21,6 +21,8 @@ export interface Message {
   timestamp: number;
   pending?: boolean;
   thinking?: string;
+  actualModel?: string; // which model actually answered this message
+  usedFallback?: boolean; // true when a different model was used than requested
 }
 
 export interface QueuedQuestion {

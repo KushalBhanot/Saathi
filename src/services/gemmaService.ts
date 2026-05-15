@@ -88,7 +88,9 @@ export interface GemmaMessage {
 
 export interface ParsedResponse {
   answer: string;
-  thinking: string | null; // null when thinking mode is off or model didn't think
+  thinking: string | null;
+  actualModel: string; // always set — which model actually answered
+  usedFallback?: boolean; // true when a different model was used than requested
 }
 
 /**
@@ -96,7 +98,7 @@ export interface ParsedResponse {
  * Gemma 4 wraps reasoning in: <|channel>thought ... <channel|>
  * We separate this from the final answer so the UI can show/hide it.
  */
-function parseGemmaResponse(raw: string): ParsedResponse {
+function parseGemmaResponse(raw: string): Omit<ParsedResponse, 'actualModel'> {
   // Try structured channel tags first (Gemma 4 native format)
   const channelRegex = /<\|channel>thought([\s\S]*?)<channel\|>/i;
   const channelMatch = raw.match(channelRegex);
@@ -136,7 +138,7 @@ export async function askGemma(
   const url = BASE_URL + modelId + ':generateContent?key=' + API_KEY;
 
   const generationConfig: Record<string, unknown> = {
-    maxOutputTokens: 1024,
+    maxOutputTokens: 2048,
     temperature: 0.4,
   };
   // Note: thinkingConfig (thinkingBudget) is only available when running
@@ -180,11 +182,14 @@ export async function askGemma(
         const fallbackText = fallbackParts
           .map((p: { text?: string }) => p.text ?? '')
           .join('');
-        if (fallbackText)
-          return parseGemmaResponse(
-            fallbackText +
-              '\n\n_(Answered by Smart model — Expert was unavailable)_',
-          );
+        if (fallbackText) {
+          const parsed = parseGemmaResponse(fallbackText);
+          return {
+            ...parsed,
+            actualModel: MODEL_CONFIG.smart.id,
+            usedFallback: true,
+          };
+        }
       }
     }
 
@@ -211,6 +216,7 @@ export async function askGemma(
     return {
       answer: answerText.trim(),
       thinking: thinkingText.trim() || null,
+      actualModel: modelId,
     };
   }
 
@@ -218,5 +224,6 @@ export async function askGemma(
   const rawText = parts.map((p: { text?: string }) => p.text ?? '').join('');
   if (!rawText) throw new Error('Empty response from Gemma.');
 
-  return parseGemmaResponse(rawText);
+  const parsed = parseGemmaResponse(rawText);
+  return { ...parsed, actualModel: modelId };
 }
