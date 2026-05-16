@@ -1,6 +1,7 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import {
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -68,20 +69,23 @@ const LANGUAGES = Object.keys(LANGUAGE_CONFIG) as Language[];
 const MODELS = Object.keys(MODEL_CONFIG) as ModelQuality[];
 
 const HEADER_DECO = [
-  { emoji: '📚', top: 14, right: 18,  size: 36, opacity: 0.38, rotate: '12deg'  },
-  { emoji: '✏️', top: 60, right: 72,  size: 26, opacity: 0.28, rotate: '-8deg'  },
-  { emoji: '🔭', top: 10, right: 106, size: 30, opacity: 0.26, rotate: '5deg'   },
-  { emoji: '🧮', top: 86, right: 18,  size: 28, opacity: 0.30, rotate: '-12deg' },
-  { emoji: '🎓', top: 50, right: 150, size: 28, opacity: 0.22, rotate: '8deg'   },
-  { emoji: '⭐', top: 100, right: 90, size: 22, opacity: 0.36, rotate: '0deg'   },
-  { emoji: '🌈', top: 90, right: 152, size: 24, opacity: 0.20, rotate: '-5deg'  },
+  { emoji: '📚', top: 14, right: 18, size: 36, opacity: 0.38, rotate: '12deg' },
+  { emoji: '✏️', top: 60, right: 72, size: 26, opacity: 0.28, rotate: '-8deg' },
+  { emoji: '🔭', top: 10, right: 106, size: 30, opacity: 0.26, rotate: '5deg' },
+  { emoji: '🧮', top: 86, right: 18, size: 28, opacity: 0.3, rotate: '-12deg' },
+  { emoji: '🎓', top: 50, right: 150, size: 28, opacity: 0.22, rotate: '8deg' },
+  { emoji: '⭐', top: 100, right: 90, size: 22, opacity: 0.36, rotate: '0deg' },
+  { emoji: '🌈', top: 90, right: 152, size: 24, opacity: 0.2, rotate: '-5deg' },
 ];
 
 export function SubjectPickerScreen({ navigation }: Props) {
   const [selectedGrade, setSelectedGrade] = useState<Grade>(5);
   const [selectedModel, setSelectedModel] = useState<ModelQuality>('fast');
   const [selectedLang, setSelectedLang] = useState<Language>('English');
-  const [progress, setProgress] = useState<Record<Subject, ProgressEntry> | null>(null);
+  const [progress, setProgress] = useState<Record<
+    Subject,
+    ProgressEntry
+  > | null>(null);
 
   useEffect(() => {
     getProgress().then(setProgress);
@@ -97,15 +101,14 @@ export function SubjectPickerScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      {/* Indigo slab behind the header */}
-      <View style={styles.headerSlab} />
-
+    // SafeAreaView uses ACCENT so status bar area matches the indigo header on iOS
+    <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        style={styles.scroll}
       >
-        {/* ── Header ── */}
+        {/* ── Indigo header ── */}
         <View style={styles.header}>
           {HEADER_DECO.map((d, i) => (
             <Text
@@ -129,9 +132,8 @@ export function SubjectPickerScreen({ navigation }: Props) {
           </Text>
         </View>
 
-        {/* ── White card ── */}
+        {/* ── White card pulls up over header ── */}
         <View style={styles.card}>
-
           {/* Grade */}
           <Text style={styles.sectionLabel}>Your Grade</Text>
           <ScrollView
@@ -142,7 +144,10 @@ export function SubjectPickerScreen({ navigation }: Props) {
             {GRADES.map((g) => (
               <TouchableOpacity
                 key={g}
-                style={[styles.gradePill, selectedGrade === g && styles.gradePillActive]}
+                style={[
+                  styles.gradePill,
+                  selectedGrade === g && styles.gradePillActive,
+                ]}
                 onPress={() => setSelectedGrade(g)}
               >
                 <Text
@@ -167,10 +172,15 @@ export function SubjectPickerScreen({ navigation }: Props) {
             {LANGUAGES.map((lang) => (
               <TouchableOpacity
                 key={lang}
-                style={[styles.langPill, selectedLang === lang && styles.langPillActive]}
+                style={[
+                  styles.langPill,
+                  selectedLang === lang && styles.langPillActive,
+                ]}
                 onPress={() => setSelectedLang(lang)}
               >
-                <Text style={styles.langFlag}>{LANGUAGE_CONFIG[lang].flag}</Text>
+                <Text style={styles.langFlag}>
+                  {LANGUAGE_CONFIG[lang].flag}
+                </Text>
                 <Text
                   style={[
                     styles.langText,
@@ -183,8 +193,10 @@ export function SubjectPickerScreen({ navigation }: Props) {
             ))}
           </ScrollView>
 
-          {/* Model / Tutor speed */}
-          <Text style={[styles.sectionLabel, { marginTop: 24 }]}>Tutor Speed</Text>
+          {/* Tutor speed */}
+          <Text style={[styles.sectionLabel, { marginTop: 24 }]}>
+            Tutor Speed
+          </Text>
           <View style={styles.modelRow}>
             {MODELS.map((m) => {
               const cfg = MODEL_CONFIG[m];
@@ -196,7 +208,9 @@ export function SubjectPickerScreen({ navigation }: Props) {
                   onPress={() => setSelectedModel(m)}
                 >
                   <Text style={styles.modelEmoji}>{cfg.emoji}</Text>
-                  <Text style={[styles.modelLabel, sel && styles.modelLabelActive]}>
+                  <Text
+                    style={[styles.modelLabel, sel && styles.modelLabelActive]}
+                  >
                     {cfg.label}
                   </Text>
                   <Text style={styles.modelDesc}>{cfg.desc}</Text>
@@ -221,15 +235,12 @@ export function SubjectPickerScreen({ navigation }: Props) {
                 onPress={() => handleSubjectPress(s.key)}
                 activeOpacity={0.82}
               >
-                {/* Ghost emoji background */}
                 <Text style={styles.subjectGhost}>{s.ghostEmoji}</Text>
-
-                {/* Icon */}
-                <View style={[styles.subjectIconBox, { backgroundColor: s.color }]}>
+                <View
+                  style={[styles.subjectIconBox, { backgroundColor: s.color }]}
+                >
                   <Text style={styles.subjectIconEmoji}>{s.emoji}</Text>
                 </View>
-
-                {/* Text block */}
                 <View style={styles.subjectBody}>
                   <Text style={[styles.subjectName, { color: s.textColor }]}>
                     {s.key}
@@ -242,14 +253,14 @@ export function SubjectPickerScreen({ navigation }: Props) {
                         { backgroundColor: s.color + '22' },
                       ]}
                     >
-                      <Text style={[styles.progressTagText, { color: s.color }]}>
+                      <Text
+                        style={[styles.progressTagText, { color: s.color }]}
+                      >
                         🔥 {count} question{count !== 1 ? 's' : ''} asked
                       </Text>
                     </View>
                   )}
                 </View>
-
-                {/* Arrow */}
                 <Text style={[styles.subjectArrow, { color: s.color }]}>›</Text>
               </TouchableOpacity>
             );
@@ -268,25 +279,19 @@ export function SubjectPickerScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FAFAF9' },
-
-  headerSlab: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 250,
-    backgroundColor: ACCENT,
-  },
-
+  // SafeAreaView is ACCENT so the status bar area matches the indigo header
+  safe: { flex: 1, backgroundColor: ACCENT },
+  // ScrollView itself has white background below the card
+  scroll: { backgroundColor: '#FAFAF9' },
   scrollContent: { paddingBottom: 32 },
 
-  // Header
+  // Indigo header — no absolute positioned slab needed anymore
   header: {
+    backgroundColor: ACCENT,
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 52,
-    minHeight: 185,
+    paddingBottom: 56,
+    minHeight: 190,
   },
   globe: { fontSize: 46, marginBottom: 4 },
   appName: {
@@ -302,7 +307,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  // White content card
+  // White card — overflow hidden clips the rounded corners properly on iOS
   card: {
     backgroundColor: '#FAFAF9',
     borderTopLeftRadius: 32,
@@ -310,6 +315,16 @@ const styles = StyleSheet.create({
     marginTop: -28,
     padding: 24,
     paddingBottom: 12,
+    overflow: 'hidden',
+    // Shadow for the card lift effect
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: -4 },
+      },
+    }),
   },
 
   sectionLabel: {
@@ -382,7 +397,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
 
-  // Subject section heading
+  // Subject heading
   subjectHeading: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -390,11 +405,7 @@ const styles = StyleSheet.create({
     marginTop: 28,
     marginBottom: 16,
   },
-  subjectHeadingTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1C1917',
-  },
+  subjectHeadingTitle: { fontSize: 20, fontWeight: '800', color: '#1C1917' },
   subjectHeadingHint: { fontSize: 13, color: '#A8A29E', fontWeight: '500' },
 
   // Subject cards
