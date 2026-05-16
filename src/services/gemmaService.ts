@@ -3,6 +3,13 @@ import { Grade, Language, ModelQuality, Subject } from '../types';
 const API_KEY = process.env.EXPO_PUBLIC_GEMMA_API_KEY ?? '';
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
+export class QuotaExceededError extends Error {
+  constructor() {
+    super('Daily free-tier quota exceeded');
+    this.name = 'QuotaExceededError';
+  }
+}
+
 export const MODEL_CONFIG: Record<
   ModelQuality,
   { id: string; label: string; emoji: string; desc: string; isGemma: boolean }
@@ -163,6 +170,8 @@ export async function askGemma(
   if (!res.ok) {
     const err = await res.text();
     console.error('API error for model ' + modelId + ':', res.status, err);
+
+    if (res.status === 429) throw new QuotaExceededError();
 
     // gemma-4-31b-it is prone to 500 errors on the free tier (overloaded).
     // Automatically fall back to gemma-4-26b-a4b-it on server errors.

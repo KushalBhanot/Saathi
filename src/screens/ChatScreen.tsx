@@ -25,6 +25,7 @@ import {
   GemmaMessage,
   MODEL_CONFIG,
   LANGUAGE_CONFIG,
+  QuotaExceededError,
   askGemma,
 } from '../services/gemmaService';
 import {
@@ -193,6 +194,20 @@ export function ChatScreen({ navigation, route }: Props) {
           timestamp: Date.now(),
         },
       ]);
+    } catch (e) {
+      const content =
+        e instanceof QuotaExceededError
+          ? "You've reached today's free AI limit. Your lessons will refresh at midnight — come back tomorrow and keep learning! 🌙"
+          : "Sorry, I couldn't connect right now. Try again in a moment!";
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-err`,
+          role: 'assistant',
+          content,
+          timestamp: Date.now(),
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -296,14 +311,17 @@ export function ChatScreen({ navigation, route }: Props) {
           timestamp: Date.now(),
         },
       ]);
-    } catch {
+    } catch (e) {
+      const content =
+        e instanceof QuotaExceededError
+          ? "You've reached today's free AI limit. Your lessons will refresh at midnight — come back tomorrow and keep learning! 🌙"
+          : "Sorry, I couldn't connect right now. Try again in a moment!";
       setMessages((prev) => [
         ...prev,
         {
           id: `${Date.now()}-err`,
           role: 'assistant',
-          content:
-            "Sorry, I couldn't connect right now. Try again in a moment!",
+          content,
           timestamp: Date.now(),
         },
       ]);
