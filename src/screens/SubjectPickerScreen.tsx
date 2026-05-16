@@ -1,7 +1,6 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import {
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,42 +23,47 @@ type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'SubjectPicker'>;
 };
 
-const ACCENT = '#4338CA';
+// Design tokens
+const BG = '#F4F4FA';
+const SURFACE = '#EEEEF8';
+const CARD = '#FFFFFF';
+const INDIGO = '#6366F1';
+const INDIGO_DK = '#4338CA';
+const INDIGO_BG = '#EEF2FF';
+const TEXT_HI = '#0F0F1A';
+const TEXT_LO = '#9898B8';
+const BORDER = '#EEEEF0';
 
 const SUBJECTS: {
   key: Subject;
   emoji: string;
-  ghostEmoji: string;
-  color: string;
-  bg: string;
-  textColor: string;
+  iconBg: string;
+  badgeBg: string;
+  badgeText: string;
   desc: string;
 }[] = [
   {
     key: 'Math',
     emoji: '➕',
-    ghostEmoji: '🔢',
-    color: '#7C3AED',
-    bg: '#EDE9FE',
-    textColor: '#5B21B6',
+    iconBg: '#EEF2FF',
+    badgeBg: '#EEF2FF',
+    badgeText: INDIGO_DK,
     desc: 'Numbers, fractions & geometry',
   },
   {
     key: 'Science',
     emoji: '🔬',
-    ghostEmoji: '🚀',
-    color: '#059669',
-    bg: '#ECFDF5',
-    textColor: '#065F46',
+    iconBg: '#ECFDF5',
+    badgeBg: '#ECFDF5',
+    badgeText: '#065F46',
     desc: 'Plants, animals, space & experiments',
   },
   {
     key: 'English',
     emoji: '📖',
-    ghostEmoji: '✍️',
-    color: '#D97706',
-    bg: '#FFFBEB',
-    textColor: '#92400E',
+    iconBg: '#FFF7ED',
+    badgeBg: '#FFF7ED',
+    badgeText: '#9A3412',
     desc: 'Reading, writing & vocabulary',
   },
 ];
@@ -67,16 +71,6 @@ const SUBJECTS: {
 const GRADES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as Grade[];
 const LANGUAGES = Object.keys(LANGUAGE_CONFIG) as Language[];
 const MODELS = Object.keys(MODEL_CONFIG) as ModelQuality[];
-
-const HEADER_DECO = [
-  { emoji: '📚', top: 14, right: 18, size: 36, opacity: 0.38, rotate: '12deg' },
-  { emoji: '✏️', top: 60, right: 72, size: 26, opacity: 0.28, rotate: '-8deg' },
-  { emoji: '🔭', top: 10, right: 106, size: 30, opacity: 0.26, rotate: '5deg' },
-  { emoji: '🧮', top: 86, right: 18, size: 28, opacity: 0.3, rotate: '-12deg' },
-  { emoji: '🎓', top: 50, right: 150, size: 28, opacity: 0.22, rotate: '8deg' },
-  { emoji: '⭐', top: 100, right: 90, size: 22, opacity: 0.36, rotate: '0deg' },
-  { emoji: '🌈', top: 90, right: 152, size: 24, opacity: 0.2, rotate: '-5deg' },
-];
 
 export function SubjectPickerScreen({ navigation }: Props) {
   const [selectedGrade, setSelectedGrade] = useState<Grade>(5);
@@ -91,187 +85,156 @@ export function SubjectPickerScreen({ navigation }: Props) {
     getProgress().then(setProgress);
   }, []);
 
-  const handleSubjectPress = (subject: Subject) => {
+  const go = (subject: Subject) =>
     navigation.navigate('Chat', {
       subject,
       grade: selectedGrade,
       model: selectedModel,
       language: selectedLang,
     });
-  };
 
   return (
-    // SafeAreaView uses ACCENT so status bar area matches the indigo header on iOS
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        style={styles.scroll}
+        contentContainerStyle={styles.scroll}
       >
-        {/* ── Indigo header ── */}
-        <View style={styles.header}>
-          {HEADER_DECO.map((d, i) => (
-            <Text
-              key={i}
-              style={{
-                position: 'absolute',
-                top: d.top,
-                right: d.right,
-                fontSize: d.size,
-                opacity: d.opacity,
-                transform: [{ rotate: d.rotate }],
-              }}
-            >
-              {d.emoji}
-            </Text>
-          ))}
-          <Text style={styles.globe}>🌍</Text>
-          <Text style={styles.appName}>EduReach</Text>
-          <Text style={styles.tagline}>
-            Your personal AI tutor{'\n'}works anywhere, even offline ✨
+        {/* Brand + hero */}
+        <View style={styles.hero}>
+          <View style={styles.brandRow}>
+            <View style={styles.brandDot} />
+            <Text style={styles.brandName}>EduReach</Text>
+          </View>
+          <Text style={styles.heading}>
+            Learn <Text style={styles.headingAccent}>anything,</Text>
+            {'\n'}anywhere.
+          </Text>
+          <Text style={styles.sub}>
+            Grades 1–10 · 6 languages · works even offline ✦
           </Text>
         </View>
 
-        {/* ── White card pulls up over header ── */}
-        <View style={styles.card}>
-          {/* Grade */}
-          <Text style={styles.sectionLabel}>Your Grade</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.gradeRow}
-          >
-            {GRADES.map((g) => (
-              <TouchableOpacity
-                key={g}
+        {/* Grade */}
+        <Text style={styles.sectionLabel}>Your Grade</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.pillRow}
+        >
+          {GRADES.map((g) => (
+            <TouchableOpacity
+              key={g}
+              style={[
+                styles.gradePill,
+                selectedGrade === g && styles.gradePillOn,
+              ]}
+              onPress={() => setSelectedGrade(g)}
+            >
+              <Text
                 style={[
-                  styles.gradePill,
-                  selectedGrade === g && styles.gradePillActive,
+                  styles.gradePillText,
+                  selectedGrade === g && styles.gradePillTextOn,
                 ]}
-                onPress={() => setSelectedGrade(g)}
               >
-                <Text
-                  style={[
-                    styles.gradePillText,
-                    selectedGrade === g && styles.gradePillTextActive,
-                  ]}
-                >
-                  {g}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                {g}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
 
-          {/* Language */}
-          <Text style={[styles.sectionLabel, { marginTop: 24 }]}>Language</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.langRow}
-          >
-            {LANGUAGES.map((lang) => (
-              <TouchableOpacity
-                key={lang}
+        {/* Language */}
+        <Text style={[styles.sectionLabel, { marginTop: 22 }]}>Language</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.pillRow}
+        >
+          {LANGUAGES.map((lang) => (
+            <TouchableOpacity
+              key={lang}
+              style={[
+                styles.langPill,
+                selectedLang === lang && styles.langPillOn,
+              ]}
+              onPress={() => setSelectedLang(lang)}
+            >
+              <Text style={styles.langFlag}>{LANGUAGE_CONFIG[lang].flag}</Text>
+              <Text
                 style={[
-                  styles.langPill,
-                  selectedLang === lang && styles.langPillActive,
+                  styles.langText,
+                  selectedLang === lang && styles.langTextOn,
                 ]}
-                onPress={() => setSelectedLang(lang)}
               >
-                <Text style={styles.langFlag}>
-                  {LANGUAGE_CONFIG[lang].flag}
-                </Text>
-                <Text
-                  style={[
-                    styles.langText,
-                    selectedLang === lang && styles.langTextActive,
-                  ]}
-                >
-                  {lang}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                {lang}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
 
-          {/* Tutor speed */}
-          <Text style={[styles.sectionLabel, { marginTop: 24 }]}>
-            Tutor Speed
-          </Text>
-          <View style={styles.modelRow}>
-            {MODELS.map((m) => {
-              const cfg = MODEL_CONFIG[m];
-              const sel = selectedModel === m;
-              return (
-                <TouchableOpacity
-                  key={m}
-                  style={[styles.modelCard, sel && styles.modelCardActive]}
-                  onPress={() => setSelectedModel(m)}
-                >
-                  <Text style={styles.modelEmoji}>{cfg.emoji}</Text>
-                  <Text
-                    style={[styles.modelLabel, sel && styles.modelLabelActive]}
-                  >
-                    {cfg.label}
-                  </Text>
-                  <Text style={styles.modelDesc}>{cfg.desc}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Subject heading */}
-          <View style={styles.subjectHeading}>
-            <Text style={styles.subjectHeadingTitle}>Choose a Subject</Text>
-            <Text style={styles.subjectHeadingHint}>tap to start →</Text>
-          </View>
-
-          {/* Subject cards */}
-          {SUBJECTS.map((s) => {
-            const count = progress?.[s.key]?.messageCount ?? 0;
+        {/* Tutor speed */}
+        <Text style={[styles.sectionLabel, { marginTop: 22 }]}>
+          Tutor Speed
+        </Text>
+        <View style={styles.modelRow}>
+          {MODELS.map((m) => {
+            const cfg = MODEL_CONFIG[m];
+            const on = selectedModel === m;
             return (
               <TouchableOpacity
-                key={s.key}
-                style={[styles.subjectCard, { backgroundColor: s.bg }]}
-                onPress={() => handleSubjectPress(s.key)}
-                activeOpacity={0.82}
+                key={m}
+                style={[styles.modelCard, on && styles.modelCardOn]}
+                onPress={() => setSelectedModel(m)}
               >
-                <Text style={styles.subjectGhost}>{s.ghostEmoji}</Text>
-                <View
-                  style={[styles.subjectIconBox, { backgroundColor: s.color }]}
-                >
-                  <Text style={styles.subjectIconEmoji}>{s.emoji}</Text>
-                </View>
-                <View style={styles.subjectBody}>
-                  <Text style={[styles.subjectName, { color: s.textColor }]}>
-                    {s.key}
-                  </Text>
-                  <Text style={styles.subjectDesc}>{s.desc}</Text>
-                  {count > 0 && (
-                    <View
-                      style={[
-                        styles.progressTag,
-                        { backgroundColor: s.color + '22' },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.progressTagText, { color: s.color }]}
-                      >
-                        🔥 {count} question{count !== 1 ? 's' : ''} asked
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={[styles.subjectArrow, { color: s.color }]}>›</Text>
+                <Text style={styles.modelEmoji}>{cfg.emoji}</Text>
+                <Text style={[styles.modelLabel, on && styles.modelLabelOn]}>
+                  {cfg.label}
+                </Text>
+                <Text style={styles.modelDesc}>{cfg.desc}</Text>
               </TouchableOpacity>
             );
           })}
+        </View>
 
-          {/* Footer tip */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              💡 Questions save offline and answer when you reconnect
-            </Text>
-          </View>
+        {/* Subject heading */}
+        <View style={styles.subjectHeadRow}>
+          <Text style={styles.subjectHeadTitle}>Choose a Subject</Text>
+          <Text style={styles.subjectHeadHint}>tap to start →</Text>
+        </View>
+
+        {/* Subject cards */}
+        {SUBJECTS.map((s) => {
+          const count = progress?.[s.key]?.messageCount ?? 0;
+          return (
+            <TouchableOpacity
+              key={s.key}
+              style={styles.subjectCard}
+              onPress={() => go(s.key)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.subjectIcon, { backgroundColor: s.iconBg }]}>
+                <Text style={styles.subjectEmoji}>{s.emoji}</Text>
+              </View>
+              <View style={styles.subjectBody}>
+                <Text style={styles.subjectName}>{s.key}</Text>
+                <Text style={styles.subjectDesc}>{s.desc}</Text>
+                {count > 0 && (
+                  <View style={[styles.badge, { backgroundColor: s.badgeBg }]}>
+                    <Text style={[styles.badgeText, { color: s.badgeText }]}>
+                      🔥 {count} question{count !== 1 ? 's' : ''} asked
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.subjectArrow}>›</Text>
+            </TouchableOpacity>
+          );
+        })}
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            💡 Questions save offline and answer when you reconnect
+          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -279,204 +242,182 @@ export function SubjectPickerScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  // SafeAreaView is ACCENT so the status bar area matches the indigo header
-  safe: { flex: 1, backgroundColor: ACCENT },
-  // ScrollView itself has white background below the card
-  scroll: { backgroundColor: '#FAFAF9' },
-  scrollContent: { paddingBottom: 32 },
+  safe: { flex: 1, backgroundColor: BG },
+  scroll: { paddingHorizontal: 22, paddingBottom: 40 },
 
-  // Indigo header — no absolute positioned slab needed anymore
-  header: {
-    backgroundColor: ACCENT,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 56,
-    minHeight: 190,
+  // Hero
+  hero: { paddingTop: 10, paddingBottom: 24 },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginBottom: 16,
   },
-  globe: { fontSize: 46, marginBottom: 4 },
-  appName: {
-    fontSize: 34,
+  brandDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: INDIGO },
+  brandName: {
+    fontSize: 11,
     fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
-    marginBottom: 6,
+    color: INDIGO,
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
   },
-  tagline: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.75)',
-    lineHeight: 22,
+  heading: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: TEXT_HI,
+    letterSpacing: -1,
+    lineHeight: 38,
+    marginBottom: 8,
   },
-
-  // White card — overflow hidden clips the rounded corners properly on iOS
-  card: {
-    backgroundColor: '#FAFAF9',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    marginTop: -28,
-    padding: 24,
-    paddingBottom: 12,
-    overflow: 'hidden',
-    // Shadow for the card lift effect
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: -4 },
-      },
-    }),
-  },
+  headingAccent: { color: INDIGO },
+  sub: { fontSize: 13, color: TEXT_LO, lineHeight: 20 },
 
   sectionLabel: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#A8A29E',
-    letterSpacing: 1.2,
+    fontWeight: '800',
+    color: TEXT_LO,
+    letterSpacing: 1.3,
     textTransform: 'uppercase',
-    marginBottom: 12,
+    marginBottom: 10,
   },
 
-  // Grade pills
-  gradeRow: { gap: 8, paddingRight: 8 },
+  pillRow: { gap: 8, paddingRight: 4 },
+
+  // Grade
   gradePill: {
     width: 46,
     height: 46,
-    borderRadius: 23,
-    backgroundColor: '#F5F5F4',
+    borderRadius: 14,
+    backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: 'transparent',
   },
-  gradePillActive: { backgroundColor: ACCENT, borderColor: ACCENT },
-  gradePillText: { fontSize: 16, fontWeight: '700', color: '#78716C' },
-  gradePillTextActive: { color: '#FFFFFF' },
+  gradePillOn: { backgroundColor: INDIGO_BG, borderColor: INDIGO },
+  gradePillText: { fontSize: 15, fontWeight: '700', color: TEXT_LO },
+  gradePillTextOn: { color: INDIGO_DK },
 
-  // Language pills
-  langRow: { gap: 8, paddingRight: 8 },
+  // Language
   langPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 22,
-    backgroundColor: '#F5F5F4',
-    borderWidth: 2,
+    paddingVertical: 10,
+    borderRadius: 24,
+    backgroundColor: SURFACE,
+    borderWidth: 1.5,
     borderColor: 'transparent',
   },
-  langPillActive: { backgroundColor: '#EEF2FF', borderColor: ACCENT },
+  langPillOn: { backgroundColor: INDIGO_BG, borderColor: INDIGO },
   langFlag: { fontSize: 18 },
-  langText: { fontSize: 13, fontWeight: '600', color: '#78716C' },
-  langTextActive: { color: ACCENT },
+  langText: { fontSize: 13, fontWeight: '600', color: TEXT_LO },
+  langTextOn: { color: INDIGO_DK },
 
-  // Model cards
+  // Model
   modelRow: { flexDirection: 'row', gap: 10 },
   modelCard: {
     flex: 1,
     borderRadius: 16,
     padding: 12,
     alignItems: 'center',
-    backgroundColor: '#F5F5F4',
-    borderWidth: 2,
+    backgroundColor: SURFACE,
+    borderWidth: 1.5,
     borderColor: 'transparent',
   },
-  modelCardActive: { backgroundColor: '#EEF2FF', borderColor: ACCENT },
+  modelCardOn: { backgroundColor: INDIGO_BG, borderColor: INDIGO },
   modelEmoji: { fontSize: 22, marginBottom: 4 },
   modelLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#78716C',
+    fontSize: 12,
+    fontWeight: '800',
+    color: TEXT_HI,
     marginBottom: 2,
   },
-  modelLabelActive: { color: ACCENT },
+  modelLabelOn: { color: INDIGO_DK },
   modelDesc: {
     fontSize: 10,
-    color: '#A8A29E',
+    color: TEXT_LO,
     textAlign: 'center',
     lineHeight: 14,
   },
 
   // Subject heading
-  subjectHeading: {
+  subjectHeadRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 28,
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  subjectHeadingTitle: { fontSize: 20, fontWeight: '800', color: '#1C1917' },
-  subjectHeadingHint: { fontSize: 13, color: '#A8A29E', fontWeight: '500' },
+  subjectHeadTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: TEXT_HI,
+    letterSpacing: -0.3,
+  },
+  subjectHeadHint: { fontSize: 13, color: TEXT_LO, fontWeight: '500' },
 
   // Subject cards
   subjectCard: {
-    borderRadius: 24,
-    padding: 18,
-    marginBottom: 14,
+    backgroundColor: CARD,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    overflow: 'hidden',
-    minHeight: 114,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    shadowColor: INDIGO,
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  subjectGhost: {
-    position: 'absolute',
-    right: -10,
-    bottom: -14,
-    fontSize: 88,
-    opacity: 0.11,
-  },
-  subjectIconBox: {
-    width: 62,
-    height: 62,
-    borderRadius: 18,
+  subjectIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
   },
-  subjectIconEmoji: { fontSize: 28 },
+  subjectEmoji: { fontSize: 26 },
   subjectBody: { flex: 1 },
   subjectName: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '800',
+    color: TEXT_HI,
     marginBottom: 3,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   subjectDesc: {
-    fontSize: 13,
-    color: '#78716C',
-    lineHeight: 18,
-    marginBottom: 6,
+    fontSize: 12,
+    color: TEXT_LO,
+    lineHeight: 17,
+    marginBottom: 5,
   },
-  progressTag: {
+  badge: {
     alignSelf: 'flex-start',
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  progressTagText: { fontSize: 11, fontWeight: '700' },
-  subjectArrow: { fontSize: 32, fontWeight: '300', marginRight: 2 },
+  badgeText: { fontSize: 11, fontWeight: '700' },
+  subjectArrow: { fontSize: 26, color: '#D4D0F0', marginRight: 2 },
 
   // Footer
   footer: {
-    backgroundColor: '#F0FDF4',
-    borderRadius: 14,
-    padding: 16,
-    marginTop: 8,
-    marginBottom: 8,
+    backgroundColor: CARD,
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: BORDER,
   },
   footerText: {
     fontSize: 13,
-    color: '#15803D',
+    color: TEXT_LO,
     lineHeight: 20,
     textAlign: 'center',
   },

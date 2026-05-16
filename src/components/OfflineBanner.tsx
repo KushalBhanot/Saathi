@@ -20,20 +20,15 @@ export function OfflineBanner({ queueLength }: Props) {
 
 const styles = StyleSheet.create({
   banner: {
-    backgroundColor: '#F59E0B',
+    backgroundColor: '#FEF3C7',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 9,
     gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FDE68A',
   },
-  icon: {
-    fontSize: 14,
-  },
-  text: {
-    color: '#1C1917',
-    fontSize: 13,
-    fontWeight: '500',
-    flex: 1,
-  },
+  icon: { fontSize: 14 },
+  text: { color: '#92400E', fontSize: 13, fontWeight: '600', flex: 1 },
 });

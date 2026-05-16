@@ -41,17 +41,18 @@ type Props = {
   route: RouteProp<RootStackParamList, 'Chat'>;
 };
 
-// Map model IDs to short display labels for the message badge
+// Design tokens — mirrors SubjectPickerScreen
+const BG = '#F4F4FA';
+const INDIGO = '#6366F1';
+const INDIGO_DK = '#4338CA';
+const SURFACE = '#EEEEF8';
+const TEXT_HI = '#0F0F1A';
+const TEXT_LO = '#9898B8';
+
 const MODEL_LABEL: Record<string, string> = {
   'gemini-2.5-flash': '⚡ Fast',
   'gemma-4-26b-a4b-it': '🧠 Smart',
   'gemma-4-31b-it': '🏆 Expert',
-};
-
-const SUBJECT_COLORS: Record<string, string> = {
-  Math: '#7C3AED',
-  Science: '#059669',
-  English: '#D97706',
 };
 
 const CHAT_HISTORY_KEY = (subject: string, grade: number) =>
@@ -75,7 +76,6 @@ function buildGemmaHistory(messages: Message[]): GemmaMessage[] {
 
 export function ChatScreen({ navigation, route }: Props) {
   const { subject, grade, model, language } = route.params;
-  const accentColor = SUBJECT_COLORS[subject] ?? '#7C3AED';
   const { isOnline } = useNetworkStatus();
   const storageKey = CHAT_HISTORY_KEY(subject, grade);
   const isGemmaModel = MODEL_CONFIG[model].isGemma;
@@ -109,11 +109,11 @@ export function ChatScreen({ navigation, route }: Props) {
     if (!isOnline) return;
     (async () => {
       const queue = await getQueue();
-      const subjectQueue = queue.filter(
+      const sq = queue.filter(
         (q) => q.subject === subject && q.grade === grade,
       );
-      if (!subjectQueue.length) return;
-      for (const item of subjectQueue) {
+      if (!sq.length) return;
+      for (const item of sq) {
         setMessages((prev) =>
           prev.map((m) => (m.id === item.id ? { ...m, pending: false } : m)),
         );
@@ -149,7 +149,7 @@ export function ChatScreen({ navigation, route }: Props) {
   }, [isOnline]);
 
   const clearHistory = useCallback(async () => {
-    Alert.alert('Clear chat?', 'This will delete all messages in this chat.', [
+    Alert.alert('Clear chat?', 'All messages in this chat will be deleted.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Clear',
@@ -172,13 +172,12 @@ export function ChatScreen({ navigation, route }: Props) {
     if (isLoading || !isOnline) return;
     setIsLoading(true);
     try {
-      const history = buildGemmaHistory(messages);
       const parsed = await askGemma(
         subject,
         grade,
         language,
         model,
-        history,
+        buildGemmaHistory(messages),
         'Please explain that differently using a different example or analogy.',
         deepThinking,
       );
@@ -195,17 +194,16 @@ export function ChatScreen({ navigation, route }: Props) {
         },
       ]);
     } catch (e) {
-      const content =
-        e instanceof QuotaExceededError
-          ? "You've reached today's free AI limit. Your lessons will refresh at midnight — come back tomorrow and keep learning! 🌙"
-          : "Sorry, I couldn't connect right now. Try again in a moment!";
       setMessages((prev) => [
         ...prev,
         {
           id: `${Date.now()}-err`,
           role: 'assistant',
-          content,
           timestamp: Date.now(),
+          content:
+            e instanceof QuotaExceededError
+              ? "You've reached today's free AI limit. Come back tomorrow and keep learning! 🌙"
+              : "Sorry, I couldn't connect right now. Try again in a moment!",
         },
       ]);
     } finally {
@@ -225,6 +223,10 @@ export function ChatScreen({ navigation, route }: Props) {
   useEffect(() => {
     navigation.setOptions({
       title: `G${grade} · ${subject}`,
+      headerStyle: { backgroundColor: BG },
+      headerShadowVisible: false,
+      headerTintColor: TEXT_HI,
+      headerTitleStyle: { fontWeight: '800', color: TEXT_HI },
       headerRight: () => (
         <View style={styles.headerRight}>
           <Text style={styles.headerBadge}>
@@ -235,8 +237,8 @@ export function ChatScreen({ navigation, route }: Props) {
             <Switch
               value={deepThinking}
               onValueChange={setDeepThinking}
-              trackColor={{ false: '#E7E5E4', true: accentColor + '80' }}
-              thumbColor={deepThinking ? accentColor : '#A8A29E'}
+              trackColor={{ false: SURFACE, true: INDIGO + '80' }}
+              thumbColor={deepThinking ? INDIGO : TEXT_LO}
               style={{ transform: [{ scaleX: 0.7 }, { scaleY: 0.7 }] }}
             />
           )}
@@ -261,7 +263,6 @@ export function ChatScreen({ navigation, route }: Props) {
     model,
     language,
     deepThinking,
-    accentColor,
     isGemmaModel,
   ]);
 
@@ -281,21 +282,19 @@ export function ChatScreen({ navigation, route }: Props) {
     await recordQuestion(subject, text);
 
     if (!isOnline) {
-      const historySnapshot = buildGemmaHistory(messages);
-      await enqueueQuestion(subject, grade, text, historySnapshot);
+      await enqueueQuestion(subject, grade, text, buildGemmaHistory(messages));
       setQueueLength((n) => n + 1);
       return;
     }
 
     setIsLoading(true);
     try {
-      const history = buildGemmaHistory(messages);
       const parsed = await askGemma(
         subject,
         grade,
         language,
         model,
-        history,
+        buildGemmaHistory(messages),
         text,
         deepThinking,
       );
@@ -312,17 +311,16 @@ export function ChatScreen({ navigation, route }: Props) {
         },
       ]);
     } catch (e) {
-      const content =
-        e instanceof QuotaExceededError
-          ? "You've reached today's free AI limit. Your lessons will refresh at midnight — come back tomorrow and keep learning! 🌙"
-          : "Sorry, I couldn't connect right now. Try again in a moment!";
       setMessages((prev) => [
         ...prev,
         {
           id: `${Date.now()}-err`,
           role: 'assistant',
-          content,
           timestamp: Date.now(),
+          content:
+            e instanceof QuotaExceededError
+              ? "You've reached today's free AI limit. Come back tomorrow and keep learning! 🌙"
+              : "Sorry, I couldn't connect right now. Try again in a moment!",
         },
       ]);
     } finally {
@@ -358,7 +356,7 @@ export function ChatScreen({ navigation, route }: Props) {
           style={[styles.row, isUser ? styles.rowUser : styles.rowAssistant]}
         >
           {!isUser && (
-            <View style={[styles.avatar, { backgroundColor: accentColor }]}>
+            <View style={styles.avatar}>
               <Text style={styles.avatarText}>AI</Text>
             </View>
           )}
@@ -368,14 +366,11 @@ export function ChatScreen({ navigation, route }: Props) {
             <View
               style={[
                 styles.bubble,
-                isUser
-                  ? [styles.bubbleUser, { backgroundColor: accentColor }]
-                  : styles.bubbleAssistant,
+                isUser ? styles.bubbleUser : styles.bubbleAssistant,
                 item.pending && styles.bubblePending,
                 isCopied && styles.bubbleCopied,
               ]}
             >
-              {/* Deep thinking accordion */}
               {item.thinking && (
                 <TouchableOpacity
                   onPress={() =>
@@ -391,7 +386,6 @@ export function ChatScreen({ navigation, route }: Props) {
                   </Text>
                 </TouchableOpacity>
               )}
-              {/* Model indicator — always shown on AI messages */}
               {item.actualModel && (
                 <View
                   style={[
@@ -415,7 +409,6 @@ export function ChatScreen({ navigation, route }: Props) {
                   <Text style={styles.thinkingBodyText}>{item.thinking}</Text>
                 </View>
               )}
-
               {isUser ? (
                 <Text style={styles.bubbleTextUser}>{item.content}</Text>
               ) : (
@@ -443,9 +436,7 @@ export function ChatScreen({ navigation, route }: Props) {
               onPress={explainDifferently}
               style={styles.reExplainBtn}
             >
-              <Text style={[styles.reExplainText, { color: accentColor }]}>
-                ↺ Explain differently
-              </Text>
+              <Text style={styles.reExplainText}>↺ Explain differently</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -457,15 +448,9 @@ export function ChatScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       {!isOnline && <OfflineBanner queueLength={queueLength} />}
 
-      {/* Deep thinking banner */}
       {deepThinking && isGemmaModel && (
-        <View
-          style={[
-            styles.deepThinkingBanner,
-            { backgroundColor: accentColor + '15' },
-          ]}
-        >
-          <Text style={[styles.deepThinkingText, { color: accentColor }]}>
+        <View style={styles.deepThinkingBanner}>
+          <Text style={styles.deepThinkingText}>
             🧩 Deep Thinking ON — tap ▸ on any response to see reasoning
           </Text>
         </View>
@@ -488,7 +473,9 @@ export function ChatScreen({ navigation, route }: Props) {
           }
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>👋</Text>
+              <View style={styles.emptyIconBox}>
+                <Text style={styles.emptyEmoji}>👋</Text>
+              </View>
               <Text style={styles.emptyTitle}>
                 Ask me anything about {subject}!
               </Text>
@@ -503,8 +490,8 @@ export function ChatScreen({ navigation, route }: Props) {
 
         {isLoading && (
           <View style={styles.typingRow}>
-            <ActivityIndicator size='small' color={accentColor} />
-            <Text style={[styles.typingText, { color: accentColor }]}>
+            <ActivityIndicator size='small' color={INDIGO} />
+            <Text style={styles.typingText}>
               {deepThinking ? 'Thinking deeply...' : 'Thinking...'}
             </Text>
           </View>
@@ -516,7 +503,7 @@ export function ChatScreen({ navigation, route }: Props) {
             value={input}
             onChangeText={setInput}
             placeholder={`Ask a Grade ${grade} ${subject} question…`}
-            placeholderTextColor='#A8A29E'
+            placeholderTextColor={TEXT_LO}
             multiline
             maxLength={400}
             returnKeyType='send'
@@ -525,7 +512,6 @@ export function ChatScreen({ navigation, route }: Props) {
           <TouchableOpacity
             style={[
               styles.sendBtn,
-              { backgroundColor: accentColor },
               (!input.trim() || isLoading) && styles.sendBtnDisabled,
             ]}
             onPress={sendMessage}
@@ -539,10 +525,13 @@ export function ChatScreen({ navigation, route }: Props) {
   );
 }
 
+const INDIGO_BG = '#EEF2FF';
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FAFAF9' },
+  safe: { flex: 1, backgroundColor: BG },
   list: { padding: 16, paddingBottom: 8, gap: 4 },
 
+  // Header
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -550,59 +539,69 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   headerBadge: { fontSize: 16 },
-  thinkingToggle: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  thinkingLabel: { fontSize: 14 },
   statusDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 2 },
-  statusText: { fontSize: 12, fontWeight: '600' },
   clearBtn: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: '#F5F5F4',
-    borderRadius: 6,
+    backgroundColor: SURFACE,
+    borderRadius: 8,
     marginLeft: 2,
   },
-  clearBtnText: { fontSize: 12, color: '#78716C', fontWeight: '500' },
+  clearBtnText: { fontSize: 12, color: TEXT_LO, fontWeight: '600' },
 
-  deepThinkingBanner: { paddingHorizontal: 16, paddingVertical: 8 },
-  deepThinkingText: { fontSize: 12, fontWeight: '500' },
+  // Deep thinking banner
+  deepThinkingBanner: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: INDIGO_BG ?? '#EEF2FF',
+  },
+  deepThinkingText: { fontSize: 12, fontWeight: '600', color: INDIGO_DK },
 
+  // Message layout
   messageGroup: { marginBottom: 8 },
   messageGroupUser: { alignItems: 'flex-end' },
   messageGroupAssistant: { alignItems: 'flex-start' },
-
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   rowUser: { justifyContent: 'flex-end' },
   rowAssistant: { justifyContent: 'flex-start' },
 
+  // Avatar
   avatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
+    backgroundColor: INDIGO,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  avatarText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
+  // Bubbles
   bubble: {
     maxWidth: '78%',
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  bubbleUser: { borderBottomRightRadius: 4 },
+  bubbleUser: {
+    backgroundColor: INDIGO,
+    borderBottomRightRadius: 4,
+  },
   bubbleAssistant: {
     backgroundColor: '#FFFFFF',
     borderBottomLeftRadius: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#EEEEF0',
+    shadowColor: INDIGO,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
-  bubblePending: { opacity: 0.65 },
+  bubblePending: { opacity: 0.6 },
   bubbleCopied: { opacity: 0.75 },
   bubbleTextUser: { fontSize: 15, color: '#FFFFFF', lineHeight: 22 },
-  pendingLabel: { fontSize: 11, color: '#FBBF24', marginTop: 4 },
+  pendingLabel: { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 4 },
   copiedLabel: {
     fontSize: 11,
     color: '#10B981',
@@ -610,43 +609,46 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Deep thinking accordion
+  // Thinking accordion
   thinkingHeader: {
     paddingVertical: 6,
     marginBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0EDEC',
+    borderBottomColor: '#EEEEF8',
   },
   thinkingHeaderText: {
     fontSize: 12,
-    color: '#A8A29E',
+    color: TEXT_LO,
     fontWeight: '600',
     fontStyle: 'italic',
   },
   thinkingBody: {
-    backgroundColor: '#FAFAF9',
+    backgroundColor: BG,
     borderRadius: 8,
     padding: 10,
     marginBottom: 8,
   },
   thinkingBodyText: {
     fontSize: 12,
-    color: '#78716C',
+    color: TEXT_LO,
     lineHeight: 18,
     fontStyle: 'italic',
   },
+
+  // Model badge
   modelBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#F5F5F4',
+    backgroundColor: SURFACE,
     borderRadius: 6,
     paddingHorizontal: 7,
     paddingVertical: 3,
     marginBottom: 6,
   },
   modelBadgeFallback: { backgroundColor: '#FEF3C7' },
-  modelBadgeText: { fontSize: 11, color: '#A8A29E', fontWeight: '500' },
+  modelBadgeText: { fontSize: 11, color: TEXT_LO, fontWeight: '600' },
   modelBadgeTextFallback: { color: '#92400E' },
 
+  // Below bubble
   belowBubble: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -656,11 +658,11 @@ const styles = StyleSheet.create({
   },
   belowBubbleUser: { justifyContent: 'flex-end' },
   belowBubbleAssistant: { marginLeft: 40 },
-
-  timestamp: { fontSize: 11, color: '#A8A29E' },
+  timestamp: { fontSize: 11, color: TEXT_LO },
   reExplainBtn: { paddingVertical: 2 },
-  reExplainText: { fontSize: 12, fontWeight: '600' },
+  reExplainText: { fontSize: 12, fontWeight: '600', color: INDIGO },
 
+  // Typing
   typingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -668,8 +670,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 8,
   },
-  typingText: { fontSize: 13, fontWeight: '500' },
+  typingText: { fontSize: 13, fontWeight: '500', color: INDIGO },
 
+  // Input
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -677,33 +680,44 @@ const styles = StyleSheet.create({
     padding: 12,
     paddingBottom: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E7E5E4',
-    backgroundColor: '#FAFAF9',
+    borderTopColor: '#EEEEF0',
+    backgroundColor: BG,
   },
   input: {
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#E7E5E4',
+    borderColor: '#EEEEF0',
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
-    color: '#1C1917',
+    color: TEXT_HI,
     maxHeight: 120,
   },
   sendBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
+    backgroundColor: INDIGO,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendBtnDisabled: { opacity: 0.4 },
+  sendBtnDisabled: { opacity: 0.35 },
   sendIcon: { color: '#fff', fontSize: 20, fontWeight: '700' },
 
-  empty: { flex: 1, alignItems: 'center', paddingTop: 80, gap: 8 },
-  emptyEmoji: { fontSize: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: '#1C1917' },
-  emptySubtitle: { fontSize: 13, color: '#A8A29E' },
+  // Empty state
+  empty: { flex: 1, alignItems: 'center', paddingTop: 80, gap: 10 },
+  emptyIconBox: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyEmoji: { fontSize: 36 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: TEXT_HI },
+  emptySubtitle: { fontSize: 13, color: TEXT_LO },
 });
