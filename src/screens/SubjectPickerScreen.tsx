@@ -23,63 +23,73 @@ type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'SubjectPicker'>;
 };
 
+const ACCENT = '#4338CA';
+
 const SUBJECTS: {
   key: Subject;
   emoji: string;
+  ghostEmoji: string;
   color: string;
   bg: string;
+  textColor: string;
   desc: string;
 }[] = [
   {
     key: 'Math',
     emoji: '➕',
+    ghostEmoji: '🔢',
     color: '#7C3AED',
     bg: '#EDE9FE',
-    desc: 'Numbers, fractions, geometry and more',
+    textColor: '#5B21B6',
+    desc: 'Numbers, fractions & geometry',
   },
   {
     key: 'Science',
     emoji: '🔬',
+    ghostEmoji: '🚀',
     color: '#059669',
-    bg: '#D1FAE5',
-    desc: 'Plants, animals, space, and experiments',
+    bg: '#ECFDF5',
+    textColor: '#065F46',
+    desc: 'Plants, animals, space & experiments',
   },
   {
     key: 'English',
     emoji: '📖',
+    ghostEmoji: '✍️',
     color: '#D97706',
-    bg: '#FEF3C7',
-    desc: 'Reading, writing, grammar and vocabulary',
+    bg: '#FFFBEB',
+    textColor: '#92400E',
+    desc: 'Reading, writing & vocabulary',
   },
 ];
 
-const GRADE_GROUPS = [
-  { label: 'Primary', grades: [1, 2, 3, 4] as Grade[] },
-  { label: 'Middle', grades: [5, 6, 7, 8] as Grade[] },
-  { label: 'High', grades: [9, 10] as Grade[] },
-];
-
+const GRADES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as Grade[];
 const LANGUAGES = Object.keys(LANGUAGE_CONFIG) as Language[];
 const MODELS = Object.keys(MODEL_CONFIG) as ModelQuality[];
 
+const HEADER_DECO = [
+  { emoji: '📚', top: 14, right: 18,  size: 36, opacity: 0.38, rotate: '12deg'  },
+  { emoji: '✏️', top: 60, right: 72,  size: 26, opacity: 0.28, rotate: '-8deg'  },
+  { emoji: '🔭', top: 10, right: 106, size: 30, opacity: 0.26, rotate: '5deg'   },
+  { emoji: '🧮', top: 86, right: 18,  size: 28, opacity: 0.30, rotate: '-12deg' },
+  { emoji: '🎓', top: 50, right: 150, size: 28, opacity: 0.22, rotate: '8deg'   },
+  { emoji: '⭐', top: 100, right: 90, size: 22, opacity: 0.36, rotate: '0deg'   },
+  { emoji: '🌈', top: 90, right: 152, size: 24, opacity: 0.20, rotate: '-5deg'  },
+];
+
 export function SubjectPickerScreen({ navigation }: Props) {
   const [selectedGrade, setSelectedGrade] = useState<Grade>(5);
-  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelQuality>('fast');
   const [selectedLang, setSelectedLang] = useState<Language>('English');
-  const [progress, setProgress] = useState<Record<
-    Subject,
-    ProgressEntry
-  > | null>(null);
+  const [progress, setProgress] = useState<Record<Subject, ProgressEntry> | null>(null);
 
   useEffect(() => {
     getProgress().then(setProgress);
   }, []);
 
-  const handleStart = () => {
-    if (!selectedSubject) return;
+  const handleSubjectPress = (subject: Subject) => {
     navigation.navigate('Chat', {
-      subject: selectedSubject,
+      subject,
       grade: selectedGrade,
       model: selectedModel,
       language: selectedLang,
@@ -88,167 +98,169 @@ export function SubjectPickerScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Header */}
+      {/* Indigo slab behind the header */}
+      <View style={styles.headerSlab} />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* ── Header ── */}
         <View style={styles.header}>
-          <Text style={styles.logo}>🌍 EduReach</Text>
+          {HEADER_DECO.map((d, i) => (
+            <Text
+              key={i}
+              style={{
+                position: 'absolute',
+                top: d.top,
+                right: d.right,
+                fontSize: d.size,
+                opacity: d.opacity,
+                transform: [{ rotate: d.rotate }],
+              }}
+            >
+              {d.emoji}
+            </Text>
+          ))}
+          <Text style={styles.globe}>🌍</Text>
+          <Text style={styles.appName}>EduReach</Text>
           <Text style={styles.tagline}>
-            Your personal AI tutor — works anywhere
+            Your personal AI tutor{'\n'}works anywhere, even offline ✨
           </Text>
         </View>
 
-        {/* Grade */}
-        <Text style={styles.sectionLabel}>Select your grade</Text>
-        <View style={styles.gradeContainer}>
-          {GRADE_GROUPS.map((group) => (
-            <View key={group.label} style={styles.gradeGroup}>
-              <Text style={styles.gradeGroupLabel}>{group.label}</Text>
-              <View style={styles.gradeRow}>
-                {group.grades.map((g) => (
-                  <TouchableOpacity
-                    key={g}
-                    style={[
-                      styles.gradeBtn,
-                      selectedGrade === g && styles.gradeBtnSelected,
-                    ]}
-                    onPress={() => setSelectedGrade(g)}
-                  >
-                    <Text
-                      style={[
-                        styles.gradeBtnText,
-                        selectedGrade === g && styles.gradeBtnTextSelected,
-                      ]}
-                    >
-                      {g}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          ))}
-        </View>
+        {/* ── White card ── */}
+        <View style={styles.card}>
 
-        {/* Language */}
-        <Text style={styles.sectionLabel}>Language</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.langScroll}
-        >
-          {LANGUAGES.map((lang) => (
-            <TouchableOpacity
-              key={lang}
-              style={[
-                styles.langBtn,
-                selectedLang === lang && styles.langBtnSelected,
-              ]}
-              onPress={() => setSelectedLang(lang)}
-            >
-              <Text style={styles.langFlag}>{LANGUAGE_CONFIG[lang].flag}</Text>
-              <Text
-                style={[
-                  styles.langText,
-                  selectedLang === lang && styles.langTextSelected,
-                ]}
-              >
-                {lang}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Model */}
-        <Text style={[styles.sectionLabel, { marginTop: 24 }]}>
-          Tutor quality
-        </Text>
-        <View style={styles.modelRow}>
-          {MODELS.map((m) => {
-            const cfg = MODEL_CONFIG[m];
-            const selected = selectedModel === m;
-            return (
+          {/* Grade */}
+          <Text style={styles.sectionLabel}>Your Grade</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.gradeRow}
+          >
+            {GRADES.map((g) => (
               <TouchableOpacity
-                key={m}
-                style={[styles.modelBtn, selected && styles.modelBtnSelected]}
-                onPress={() => setSelectedModel(m)}
+                key={g}
+                style={[styles.gradePill, selectedGrade === g && styles.gradePillActive]}
+                onPress={() => setSelectedGrade(g)}
               >
-                <Text style={styles.modelEmoji}>{cfg.emoji}</Text>
                 <Text
                   style={[
-                    styles.modelLabel,
-                    selected && styles.modelLabelSelected,
+                    styles.gradePillText,
+                    selectedGrade === g && styles.gradePillTextActive,
                   ]}
                 >
-                  {cfg.label}
+                  {g}
                 </Text>
-                <Text style={styles.modelDesc}>{cfg.desc}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Language */}
+          <Text style={[styles.sectionLabel, { marginTop: 24 }]}>Language</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.langRow}
+          >
+            {LANGUAGES.map((lang) => (
+              <TouchableOpacity
+                key={lang}
+                style={[styles.langPill, selectedLang === lang && styles.langPillActive]}
+                onPress={() => setSelectedLang(lang)}
+              >
+                <Text style={styles.langFlag}>{LANGUAGE_CONFIG[lang].flag}</Text>
+                <Text
+                  style={[
+                    styles.langText,
+                    selectedLang === lang && styles.langTextActive,
+                  ]}
+                >
+                  {lang}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Model / Tutor speed */}
+          <Text style={[styles.sectionLabel, { marginTop: 24 }]}>Tutor Speed</Text>
+          <View style={styles.modelRow}>
+            {MODELS.map((m) => {
+              const cfg = MODEL_CONFIG[m];
+              const sel = selectedModel === m;
+              return (
+                <TouchableOpacity
+                  key={m}
+                  style={[styles.modelCard, sel && styles.modelCardActive]}
+                  onPress={() => setSelectedModel(m)}
+                >
+                  <Text style={styles.modelEmoji}>{cfg.emoji}</Text>
+                  <Text style={[styles.modelLabel, sel && styles.modelLabelActive]}>
+                    {cfg.label}
+                  </Text>
+                  <Text style={styles.modelDesc}>{cfg.desc}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Subject heading */}
+          <View style={styles.subjectHeading}>
+            <Text style={styles.subjectHeadingTitle}>Choose a Subject</Text>
+            <Text style={styles.subjectHeadingHint}>tap to start →</Text>
+          </View>
+
+          {/* Subject cards */}
+          {SUBJECTS.map((s) => {
+            const count = progress?.[s.key]?.messageCount ?? 0;
+            return (
+              <TouchableOpacity
+                key={s.key}
+                style={[styles.subjectCard, { backgroundColor: s.bg }]}
+                onPress={() => handleSubjectPress(s.key)}
+                activeOpacity={0.82}
+              >
+                {/* Ghost emoji background */}
+                <Text style={styles.subjectGhost}>{s.ghostEmoji}</Text>
+
+                {/* Icon */}
+                <View style={[styles.subjectIconBox, { backgroundColor: s.color }]}>
+                  <Text style={styles.subjectIconEmoji}>{s.emoji}</Text>
+                </View>
+
+                {/* Text block */}
+                <View style={styles.subjectBody}>
+                  <Text style={[styles.subjectName, { color: s.textColor }]}>
+                    {s.key}
+                  </Text>
+                  <Text style={styles.subjectDesc}>{s.desc}</Text>
+                  {count > 0 && (
+                    <View
+                      style={[
+                        styles.progressTag,
+                        { backgroundColor: s.color + '22' },
+                      ]}
+                    >
+                      <Text style={[styles.progressTagText, { color: s.color }]}>
+                        🔥 {count} question{count !== 1 ? 's' : ''} asked
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Arrow */}
+                <Text style={[styles.subjectArrow, { color: s.color }]}>›</Text>
               </TouchableOpacity>
             );
           })}
-        </View>
 
-        {/* Subject */}
-        <Text style={[styles.sectionLabel, { marginTop: 24 }]}>
-          Choose a subject
-        </Text>
-        {SUBJECTS.map((subject) => {
-          const count = progress?.[subject.key]?.messageCount ?? 0;
-          const isSelected = selectedSubject === subject.key;
-          return (
-            <TouchableOpacity
-              key={subject.key}
-              style={[
-                styles.card,
-                { borderLeftColor: subject.color },
-                isSelected && { backgroundColor: subject.bg },
-              ]}
-              onPress={() => setSelectedSubject(subject.key)}
-              activeOpacity={0.85}
-            >
-              <View
-                style={[
-                  styles.emojiBox,
-                  { backgroundColor: isSelected ? '#fff' : subject.bg },
-                ]}
-              >
-                <Text style={styles.emoji}>{subject.emoji}</Text>
-              </View>
-              <View style={styles.cardText}>
-                <Text style={[styles.subjectName, { color: subject.color }]}>
-                  {subject.key}
-                </Text>
-                <Text style={styles.subjectDesc}>{subject.desc}</Text>
-                {count > 0 && (
-                  <Text style={styles.questionCount}>
-                    {count} question{count !== 1 ? 's' : ''} asked
-                  </Text>
-                )}
-              </View>
-              {isSelected && (
-                <Text style={[styles.checkmark, { color: subject.color }]}>
-                  ✓
-                </Text>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-
-        {/* Start */}
-        <TouchableOpacity
-          style={[styles.startBtn, !selectedSubject && styles.startBtnDisabled]}
-          onPress={handleStart}
-          disabled={!selectedSubject}
-        >
-          <Text style={styles.startBtnText}>
-            {selectedSubject
-              ? `Start Grade ${selectedGrade} ${selectedSubject} →`
-              : 'Select a subject to start'}
-          </Text>
-        </TouchableOpacity>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            💡 Questions are saved offline and answered when you reconnect
-          </Text>
+          {/* Footer tip */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              💡 Questions save offline and answer when you reconnect
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -257,69 +269,104 @@ export function SubjectPickerScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FAFAF9' },
-  scroll: { padding: 24, paddingBottom: 48 },
-  header: { marginBottom: 28 },
-  logo: { fontSize: 28, fontWeight: '700', color: '#1C1917', marginBottom: 6 },
-  tagline: { fontSize: 15, color: '#78716C', lineHeight: 22 },
+
+  headerSlab: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 250,
+    backgroundColor: ACCENT,
+  },
+
+  scrollContent: { paddingBottom: 32 },
+
+  // Header
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 52,
+    minHeight: 185,
+  },
+  globe: { fontSize: 46, marginBottom: 4 },
+  appName: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+    marginBottom: 6,
+  },
+  tagline: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.75)',
+    lineHeight: 22,
+  },
+
+  // White content card
+  card: {
+    backgroundColor: '#FAFAF9',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    marginTop: -28,
+    padding: 24,
+    paddingBottom: 12,
+  },
+
   sectionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     color: '#A8A29E',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
     marginBottom: 12,
   },
 
-  // Grade
-  gradeContainer: { marginBottom: 28, gap: 12 },
-  gradeGroup: { gap: 8 },
-  gradeGroupLabel: { fontSize: 12, color: '#78716C', fontWeight: '500' },
-  gradeRow: { flexDirection: 'row', gap: 8 },
-  gradeBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+  // Grade pills
+  gradeRow: { gap: 8, paddingRight: 8 },
+  gradePill: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#F5F5F4',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F5F5F4',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: 'transparent',
   },
-  gradeBtnSelected: { backgroundColor: '#1C1917', borderColor: '#1C1917' },
-  gradeBtnText: { fontSize: 15, fontWeight: '600', color: '#78716C' },
-  gradeBtnTextSelected: { color: '#FFFFFF' },
+  gradePillActive: { backgroundColor: ACCENT, borderColor: ACCENT },
+  gradePillText: { fontSize: 16, fontWeight: '700', color: '#78716C' },
+  gradePillTextActive: { color: '#FFFFFF' },
 
-  // Language
-  langScroll: { marginBottom: 4 },
-  langBtn: {
+  // Language pills
+  langRow: { gap: 8, paddingRight: 8 },
+  langPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingVertical: 9,
+    borderRadius: 22,
     backgroundColor: '#F5F5F4',
-    marginRight: 8,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: 'transparent',
   },
-  langBtnSelected: { backgroundColor: '#EEF2FF', borderColor: '#7C3AED' },
+  langPillActive: { backgroundColor: '#EEF2FF', borderColor: ACCENT },
   langFlag: { fontSize: 18 },
-  langText: { fontSize: 13, fontWeight: '500', color: '#78716C' },
-  langTextSelected: { color: '#7C3AED', fontWeight: '700' },
+  langText: { fontSize: 13, fontWeight: '600', color: '#78716C' },
+  langTextActive: { color: ACCENT },
 
-  // Model
+  // Model cards
   modelRow: { flexDirection: 'row', gap: 10 },
-  modelBtn: {
+  modelCard: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 12,
     alignItems: 'center',
     backgroundColor: '#F5F5F4',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: 'transparent',
   },
-  modelBtnSelected: { backgroundColor: '#FAFAF9', borderColor: '#1C1917' },
+  modelCardActive: { backgroundColor: '#EEF2FF', borderColor: ACCENT },
   modelEmoji: { fontSize: 22, marginBottom: 4 },
   modelLabel: {
     fontSize: 13,
@@ -327,7 +374,7 @@ const styles = StyleSheet.create({
     color: '#78716C',
     marginBottom: 2,
   },
-  modelLabelSelected: { color: '#1C1917' },
+  modelLabelActive: { color: ACCENT },
   modelDesc: {
     fontSize: 10,
     color: '#A8A29E',
@@ -335,48 +382,91 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
 
-  // Subjects
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderLeftWidth: 4,
-    padding: 20,
-    marginBottom: 16,
+  // Subject section heading
+  subjectHeading: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  emojiBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emoji: { fontSize: 24 },
-  cardText: { flex: 1 },
-  subjectName: { fontSize: 18, fontWeight: '700', marginBottom: 3 },
-  subjectDesc: { fontSize: 13, color: '#78716C', lineHeight: 18 },
-  questionCount: { fontSize: 12, color: '#A8A29E', marginTop: 4 },
-  checkmark: { fontSize: 22, fontWeight: '700' },
-
-  // Start button
-  startBtn: {
-    backgroundColor: '#1C1917',
-    borderRadius: 16,
-    padding: 18,
-    alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'space-between',
+    marginTop: 28,
     marginBottom: 16,
   },
-  startBtnDisabled: { backgroundColor: '#D4D0CB' },
-  startBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  subjectHeadingTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1C1917',
+  },
+  subjectHeadingHint: { fontSize: 13, color: '#A8A29E', fontWeight: '500' },
 
-  footer: { backgroundColor: '#F0FDF4', borderRadius: 12, padding: 16 },
-  footerText: { fontSize: 13, color: '#15803D', lineHeight: 20 },
+  // Subject cards
+  subjectCard: {
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    overflow: 'hidden',
+    minHeight: 114,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  subjectGhost: {
+    position: 'absolute',
+    right: -10,
+    bottom: -14,
+    fontSize: 88,
+    opacity: 0.11,
+  },
+  subjectIconBox: {
+    width: 62,
+    height: 62,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  subjectIconEmoji: { fontSize: 28 },
+  subjectBody: { flex: 1 },
+  subjectName: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 3,
+    letterSpacing: -0.3,
+  },
+  subjectDesc: {
+    fontSize: 13,
+    color: '#78716C',
+    lineHeight: 18,
+    marginBottom: 6,
+  },
+  progressTag: {
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  progressTagText: { fontSize: 11, fontWeight: '700' },
+  subjectArrow: { fontSize: 32, fontWeight: '300', marginRight: 2 },
+
+  // Footer
+  footer: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  footerText: {
+    fontSize: 13,
+    color: '#15803D',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
 });
