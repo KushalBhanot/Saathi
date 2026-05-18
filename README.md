@@ -16,21 +16,35 @@ Powerful AI tutors exist — but they require stable internet, a modern device, 
 
 ---
 
+<!-- ## App Preview -->
+
+<!-- Add screenshots here after recording -->
+
+<!-- | Home Screen  | Chat         | Quiz Me      | Offline Mode |
+| ------------ | ------------ | ------------ | ------------ |
+| _screenshot_ | _screenshot_ | _screenshot_ | _screenshot_ | -->
+
+<!-- > 📹 **Demo Video:** _link coming soon_ -->
+
+---
+
 ## What It Does
 
 EduReach is a React Native mobile app giving students a personal AI tutor across Math, Science, and English — powered by **Gemma 4**.
 
 ### Core Features
 
-- 🎓 **Grade-adaptive tutoring** — Grades 1–10, each with calibrated language and depth
-- 🌐 **6 languages** — English, Hindi, Spanish, Swahili, French, Bengali
-- 📡 **Offline-first queue** — Questions saved locally when offline, auto-answered on reconnect
+- 🎓 **Grade-adaptive tutoring** — Grades 1–10, each with a distinct pedagogical approach calibrated to the student's level
+- 🌐 **6 languages** — English, Hindi, Spanish, Swahili, French, Bengali with native-language prompting (not translation)
+- 📡 **Offline-first queue** — Questions saved locally when offline with full conversation context, auto-answered on reconnect
 - 🤖 **Multi-model routing** — Fast (Gemini 2.5 Flash), Smart (Gemma 4 26B MoE), Expert (Gemma 4 31B)
-- 🧩 **Deep Thinking mode** — Toggle Gemma 4 reasoning; view collapsible thinking accordion per response
-- ↺ **Explain differently** — One tap to get a fresh analogy if the first didn't land
+- 🧩 **Deep Thinking mode** — Toggle Gemma 4 reasoning; collapsible thinking accordion per response
+- 🧪 **Quiz Me** — One tap generates 3 multiple-choice questions based on any explanation, with instant feedback and scoring
+- ↺ **Explain differently** — One tap re-teaches the same concept with a new analogy
+- 🔥 **Daily streak** — Tracks consecutive learning days to build study habits
 - 📋 **Copy on long-press** — Copy any message to clipboard
-- 🔄 **Graceful model fallback** — Auto-falls back to Smart if Expert is unavailable, with clear indication
-- 📊 **Progress tracking** — Questions asked per subject, persisted locally
+- 🔄 **Graceful model fallback** — Auto-falls back to Smart if Expert is unavailable, shown transparently
+- 🏷️ **Model badge** — Every AI response shows which model answered it
 
 ---
 
@@ -38,15 +52,15 @@ EduReach is a React Native mobile app giving students a personal AI tutor across
 
 ### 🌵 Cactus Prize — Local-First Mobile Application
 
-EduReach is a **local-first mobile app** that intelligently routes between three Gemma 4 model tiers. All data (chat history, offline queue, progress) is stored locally. Architecture is designed to swap the cloud API for on-device Gemma 4 E2B/E4B with one config change.
+EduReach routes intelligently between three Gemma 4 model tiers. All data (chat history, offline queue, progress, streaks) is stored locally on-device. Architecture designed to swap the cloud API for on-device Gemma 4 E2B/E4B with a single config change.
 
 ### 🌍 Digital Equity & Inclusivity Track
 
-6-language support, Grade 1–10 calibration, works on ₹8,000 Android phones, offline queue ensures no question is lost due to poor connectivity.
+6-language native prompting, Grade 1–10 calibration, works on ₹8,000 Android phones, offline queue ensures no question is ever lost due to poor connectivity.
 
 ### 📚 Future of Education Track
 
-Adaptive tutoring per grade, "Explain differently" re-teaches with new analogies, follow-up questions on every answer, multi-model depth selection.
+Grade-adaptive tutoring depth, Quiz Me for active recall, "Explain differently" for re-teaching, daily streak for habit formation, follow-up questions on every answer.
 
 ---
 
@@ -57,11 +71,13 @@ EduReach/
 ├── src/
 │   ├── screens/
 │   │   ├── SubjectPickerScreen.tsx   # Grade + Language + Model + Subject selection
-│   │   └── ChatScreen.tsx            # Chat UI, offline support, deep thinking
+│   │   └── ChatScreen.tsx            # Chat, offline support, quiz, deep thinking
 │   ├── services/
 │   │   ├── gemmaService.ts           # Multi-model routing, thinking parser, fallback
+│   │   ├── quizService.ts            # Quiz generation via Gemini 2.5 Flash
+│   │   ├── streakService.ts          # Daily streak tracking
 │   │   ├── offlineQueue.ts           # Queue with history snapshot, dedup, size cap
-│   │   └── progressService.ts        # Per-subject progress tracking
+│   │   └── progressService.ts        # Per-subject question count
 │   ├── components/
 │   │   ├── SimpleMarkdown.tsx        # Lightweight markdown renderer
 │   │   └── OfflineBanner.tsx         # Offline status + queue count
@@ -73,12 +89,13 @@ EduReach/
 ### Offline Queue Design
 
 ```
-Student asks question offline
-  → Saved to AsyncStorage (max 20, deduped, with history snapshot)
-  → Shown as "⏳ Queued"
+Student asks question (no internet)
+  → Saved to AsyncStorage with full conversation snapshot
+  → Capped at 20 items, deduplicated by content
+  → Shown as "⏳ Queued — will send when online"
   → NetInfo detects reconnection
-  → Queue flushed using saved history snapshot
-  → Answer shown; removed from queue only on success
+  → Queue flushed in order using saved history snapshot
+  → Answer shown; removed from queue only after confirmed response
 ```
 
 ### Multi-Model Routing
@@ -86,22 +103,35 @@ Student asks question offline
 ```
 User selects Fast | Smart | Expert
   → Routes to correct model endpoint
-  → Expert 500 → auto-retry with Smart
-  → Response tagged with actualModel
-  → Gemma 4 thought tags parsed → collapsible accordion
+  → Expert returns 500 → auto-retry with Smart model
+  → Response tagged with actualModel for transparency
+  → Gemma 4 thought tags parsed → collapsible thinking accordion
+```
+
+### Quiz Generation
+
+```
+Student taps "Quiz me" on any AI response
+  → Explanation sent to Gemini 2.5 Flash with JSON schema prompt
+  → 3 multiple-choice questions generated
+  → Displayed inline with A/B/C/D options
+  → Instant green/red feedback + explanation on answer
+  → Score shown on completion
 ```
 
 ---
 
 ## Gemma 4 Integration
 
-| Model  | ID                 | Use Case                       |
-| ------ | ------------------ | ------------------------------ |
-| Fast   | gemini-2.5-flash   | Quick answers, low data        |
-| Smart  | gemma-4-26b-a4b-it | Deeper explanations, MoE       |
-| Expert | gemma-4-31b-it     | Most thorough, advanced grades |
+| Model  | ID                 | Use Case                            |
+| ------ | ------------------ | ----------------------------------- |
+| Fast   | gemini-2.5-flash   | Quick answers, low data             |
+| Smart  | gemma-4-26b-a4b-it | Deeper explanations, MoE efficiency |
+| Expert | gemma-4-31b-it     | Most thorough, advanced grades      |
 
-Gemma 4's structured reasoning output is parsed from channel tags and shown as a collapsible "Thinking process..." accordion — same UX pattern as Google AI Studio.
+Gemma 4's structured reasoning output is parsed from `<|channel>thought` tags and shown as a collapsible "Thinking process..." accordion per response — the same UX pattern as Google AI Studio.
+
+The system prompt is assembled dynamically from five components: language prefix, persona, subject and grade, grade-specific instruction (10 distinct strings), and a math formatting rule that prevents LaTeX rendering issues.
 
 ---
 
@@ -111,23 +141,27 @@ Gemma 4's structured reasoning output is parsed from channel tags and shown as a
 git clone https://github.com/KushalBhanot/EduReach.git
 cd EduReach
 yarn install
-echo "EXPO_PUBLIC_GEMMA_API_KEY=your_key_here" > .env
-npx expo start
-```
 
-Get a free API key at [aistudio.google.com](https://aistudio.google.com). Press `a` for Android, `i` for iOS.
+# Add your free API key from aistudio.google.com
+echo "EXPO_PUBLIC_GEMMA_API_KEY=your_key_here" > .env
+
+npx expo start
+# Press 'a' for Android, 'i' for iOS simulator
+```
 
 ---
 
 ## Social Impact
 
-Target users are students in rural India, Sub-Saharan Africa, and Southeast Asia on ₹8,000–₹15,000 Android phones with intermittent 2G/3G. Private tutoring costs ₹500–₹2,000/month in India. EduReach is free. The offline queue means no question is lost even without connectivity.
+Target users are students in rural India, Sub-Saharan Africa, and Southeast Asia on ₹8,000–₹15,000 Android phones with intermittent 2G/3G connectivity. Private tutoring in India costs ₹500–₹2,000/month. EduReach is free.
+
+The offline queue is the core differentiator — a student can ask questions on the walk to school with no signal, and get every answer automatically when they reach WiFi. No question is ever lost.
 
 ---
 
 ## Built By
 
-**Kushal Bhanot** — SDE, incoming MSCS at USC  
+**Kushal Bhanot** — SDE, incoming MSCS at USC
 [LinkedIn](https://linkedin.com/in/kushalbhanot) · [GitHub](https://github.com/KushalBhanot)
 
 ---
