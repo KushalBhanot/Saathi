@@ -6,13 +6,13 @@
 
 Built for the [Gemma 4 Good Hackathon](https://www.kaggle.com/competitions/gemma-4-good-hackathon) · Kaggle × Google DeepMind
 
-<!-- --- -->
+---
 
-<!-- ## App Preview -->
+## App Preview
 
-<!-- | Home Screen  | Chat         | Quiz Me      | Offline Mode |
-| ------------ | ------------ | ------------ | ------------ |
-| _screenshot_ | _screenshot_ | _screenshot_ | _screenshot_ | -->
+| Home Screen | Chat | Quiz Me |
+| ----------- | ---- | ------- |
+|             |      |         |
 
 <!-- 📹 **Demo Video:** _coming soon_ -->
 
