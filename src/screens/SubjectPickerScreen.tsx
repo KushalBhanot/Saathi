@@ -10,6 +10,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MODEL_CONFIG, LANGUAGE_CONFIG } from '../services/gemmaService';
 import { getProgress } from '../services/progressService';
+import { getStreak } from '../services/streakService';
+import { StreakData } from '../types';
 import {
   Grade,
   Language,
@@ -80,9 +82,11 @@ export function SubjectPickerScreen({ navigation }: Props) {
     Subject,
     ProgressEntry
   > | null>(null);
+  const [streak, setStreak] = useState<StreakData | null>(null);
 
   useEffect(() => {
     getProgress().then(setProgress);
+    getStreak().then(setStreak);
   }, []);
 
   const go = (subject: Subject) =>
@@ -105,6 +109,14 @@ export function SubjectPickerScreen({ navigation }: Props) {
             <View style={styles.brandDot} />
             <Text style={styles.brandName}>EduReach</Text>
           </View>
+          {streak && streak.currentStreak > 0 && (
+            <View style={styles.streakBadge}>
+              <Text style={styles.streakFire}>🔥</Text>
+              <Text style={styles.streakText}>
+                {streak.currentStreak} day streak
+              </Text>
+            </View>
+          )}
           <Text style={styles.heading}>
             Learn <Text style={styles.headingAccent}>anything,</Text>
             {'\n'}anywhere.
@@ -405,6 +417,23 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontSize: 11, fontWeight: '700' },
   subjectArrow: { fontSize: 26, color: '#D4D0F0', marginRight: 2 },
+
+  // Streak badge
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  streakFire: { fontSize: 14 },
+  streakText: { fontSize: 12, fontWeight: '700', color: '#C2410C' },
 
   // Footer
   footer: {

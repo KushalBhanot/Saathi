@@ -14,6 +14,13 @@ export type Language =
 
 export type MessageRole = 'user' | 'assistant';
 
+export interface QuizQuestion {
+  question: string;
+  options: [string, string, string, string];
+  correctIndex: number;
+  explanation: string;
+}
+
 export interface Message {
   id: string;
   role: MessageRole;
@@ -21,8 +28,10 @@ export interface Message {
   timestamp: number;
   pending?: boolean;
   thinking?: string;
-  actualModel?: string; // which model actually answered this message
-  usedFallback?: boolean; // true when a different model was used than requested
+  actualModel?: string;
+  usedFallback?: boolean;
+  quiz?: QuizQuestion[]; // populated when this message has a quiz attached
+  quizAnswers?: Record<number, number>; // questionIndex -> chosen option index
 }
 
 export interface QueuedQuestion {
@@ -39,6 +48,13 @@ export interface ProgressEntry {
   topicsAsked: string[];
   messageCount: number;
   lastActive: number;
+}
+
+export interface StreakData {
+  currentStreak: number;
+  longestStreak: number;
+  lastActiveDate: string; // YYYY-MM-DD
+  totalDays: number;
 }
 
 export type RootStackParamList = {

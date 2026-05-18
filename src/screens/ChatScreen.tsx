@@ -28,23 +28,26 @@ import {
   QuotaExceededError,
   askGemma,
 } from '../services/gemmaService';
+import { generateQuiz } from '../services/quizService';
+import { recordActivity } from '../services/streakService';
 import {
   enqueueQuestion,
   getQueue,
   removeFromQueue,
 } from '../services/offlineQueue';
 import { recordQuestion } from '../services/progressService';
-import { Message, RootStackParamList } from '../types';
+import { Message, QuizQuestion, RootStackParamList } from '../types';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Chat'>;
   route: RouteProp<RootStackParamList, 'Chat'>;
 };
 
-// Design tokens — mirrors SubjectPickerScreen
+// Design tokens
 const BG = '#F4F4FA';
 const INDIGO = '#6366F1';
 const INDIGO_DK = '#4338CA';
+const INDIGO_BG = '#EEF2FF';
 const SURFACE = '#EEEEF8';
 const TEXT_HI = '#0F0F1A';
 const TEXT_LO = '#9898B8';
@@ -74,6 +77,96 @@ function buildGemmaHistory(messages: Message[]): GemmaMessage[] {
     }));
 }
 
+// Quiz card component
+function QuizCard({
+  quiz,
+  answers,
+  onAnswer,
+}: {
+  quiz: QuizQuestion[];
+  answers: Record<number, number>;
+  onAnswer: (qIdx: number, oIdx: number) => void;
+}) {
+  return (
+    <View style={quizStyles.container}>
+      <Text style={quizStyles.header}>🧩 Quick Quiz</Text>
+      {quiz.map((q, qi) => {
+        const chosen = answers[qi];
+        const answered = chosen !== undefined;
+        return (
+          <View key={qi} style={quizStyles.questionBlock}>
+            <Text style={quizStyles.questionText}>
+              {qi + 1}. {q.question}
+            </Text>
+            {q.options.map((opt, oi) => {
+              const isChosen = chosen === oi;
+              const isCorrect = oi === q.correctIndex;
+              let bg = SURFACE;
+              let border = 'transparent';
+              let textColor = TEXT_HI;
+              if (answered) {
+                if (isCorrect) {
+                  bg = '#ECFDF5';
+                  border = '#10B981';
+                  textColor = '#065F46';
+                } else if (isChosen) {
+                  bg = '#FEF2F2';
+                  border = '#EF4444';
+                  textColor = '#991B1B';
+                }
+              } else if (isChosen) {
+                bg = INDIGO_BG;
+                border = INDIGO;
+                textColor = INDIGO_DK;
+              }
+              return (
+                <TouchableOpacity
+                  key={oi}
+                  style={[
+                    quizStyles.option,
+                    { backgroundColor: bg, borderColor: border },
+                  ]}
+                  onPress={() => !answered && onAnswer(qi, oi)}
+                  disabled={answered}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[quizStyles.optionLabel, { color: textColor }]}>
+                    {String.fromCharCode(65 + oi)}
+                  </Text>
+                  <Text style={[quizStyles.optionText, { color: textColor }]}>
+                    {opt}
+                  </Text>
+                  {answered && isCorrect && (
+                    <Text style={quizStyles.tick}>✓</Text>
+                  )}
+                  {answered && isChosen && !isCorrect && (
+                    <Text style={quizStyles.cross}>✗</Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+            {answered && (
+              <Text style={quizStyles.explanation}>💡 {q.explanation}</Text>
+            )}
+          </View>
+        );
+      })}
+      {Object.keys(answers).length === quiz.length && (
+        <View style={quizStyles.scoreRow}>
+          <Text style={quizStyles.scoreText}>
+            {
+              Object.entries(answers).filter(
+                ([qi, oi]) => oi === quiz[Number(qi)].correctIndex,
+              ).length
+            }
+            /{quiz.length} correct 🎉
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export function ChatScreen({ navigation, route }: Props) {
   const { subject, grade, model, language } = route.params;
   const { isOnline } = useNetworkStatus();
@@ -83,11 +176,15 @@ export function ChatScreen({ navigation, route }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isQuizLoading, setIsQuizLoading] = useState(false);
   const [queueLength, setQueueLength] = useState(0);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deepThinking, setDeepThinking] = useState(false);
   const [expandedThinking, setExpandedThinking] = useState<
     Record<string, boolean>
+  >({});
+  const [quizAnswers, setQuizAnswers] = useState<
+    Record<string, Record<number, number>>
   >({});
   const listRef = useRef<FlatList>(null);
 
@@ -157,6 +254,7 @@ export function ChatScreen({ navigation, route }: Props) {
         onPress: async () => {
           await AsyncStorage.removeItem(storageKey);
           setMessages([]);
+          setQuizAnswers({});
         },
       },
     ]);
@@ -202,7 +300,7 @@ export function ChatScreen({ navigation, route }: Props) {
           timestamp: Date.now(),
           content:
             e instanceof QuotaExceededError
-              ? "You've reached today's free AI limit. Come back tomorrow and keep learning! 🌙"
+              ? "You've reached today's free AI limit. Come back tomorrow! 🌙"
               : "Sorry, I couldn't connect right now. Try again in a moment!",
         },
       ]);
@@ -219,6 +317,35 @@ export function ChatScreen({ navigation, route }: Props) {
     model,
     deepThinking,
   ]);
+
+  // Generate a quiz based on the last AI message
+  const handleQuizMe = useCallback(
+    async (messageId: string, explanation: string) => {
+      if (isQuizLoading || !isOnline) return;
+      setIsQuizLoading(true);
+      try {
+        const quiz = await generateQuiz(subject, grade, language, explanation);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, quiz } : m)),
+        );
+      } catch (e) {
+        Alert.alert('Could not generate quiz', 'Try again in a moment.');
+      } finally {
+        setIsQuizLoading(false);
+      }
+    },
+    [isQuizLoading, isOnline, subject, grade, language],
+  );
+
+  const handleQuizAnswer = useCallback(
+    (messageId: string, qIdx: number, oIdx: number) => {
+      setQuizAnswers((prev) => ({
+        ...prev,
+        [messageId]: { ...(prev[messageId] ?? {}), [qIdx]: oIdx },
+      }));
+    },
+    [],
+  );
 
   useEffect(() => {
     navigation.setOptions({
@@ -280,6 +407,7 @@ export function ChatScreen({ navigation, route }: Props) {
     };
     setMessages((prev) => [...prev, userMsg]);
     await recordQuestion(subject, text);
+    await recordActivity(); // update streak
 
     if (!isOnline) {
       await enqueueQuestion(subject, grade, text, buildGemmaHistory(messages));
@@ -319,7 +447,7 @@ export function ChatScreen({ navigation, route }: Props) {
           timestamp: Date.now(),
           content:
             e instanceof QuotaExceededError
-              ? "You've reached today's free AI limit. Come back tomorrow and keep learning! 🌙"
+              ? "You've reached today's free AI limit. Come back tomorrow! 🌙"
               : "Sorry, I couldn't connect right now. Try again in a moment!",
         },
       ]);
@@ -344,6 +472,7 @@ export function ChatScreen({ navigation, route }: Props) {
     const isLastAssistant =
       !isUser && messages.slice(index + 1).every((m) => m.role === 'user');
     const isThinkingExpanded = expandedThinking[item.id] ?? false;
+    const msgQuizAnswers = quizAnswers[item.id] ?? {};
 
     return (
       <View
@@ -424,6 +553,17 @@ export function ChatScreen({ navigation, route }: Props) {
           </TouchableWithoutFeedback>
         </View>
 
+        {/* Quiz card — rendered below the bubble, full width */}
+        {item.quiz && (
+          <View style={styles.quizWrapper}>
+            <QuizCard
+              quiz={item.quiz}
+              answers={msgQuizAnswers}
+              onAnswer={(qi, oi) => handleQuizAnswer(item.id, qi, oi)}
+            />
+          </View>
+        )}
+
         <View
           style={[
             styles.belowBubble,
@@ -431,13 +571,28 @@ export function ChatScreen({ navigation, route }: Props) {
           ]}
         >
           <Text style={styles.timestamp}>{formatTime(item.timestamp)}</Text>
-          {isLastAssistant && !item.pending && (
-            <TouchableOpacity
-              onPress={explainDifferently}
-              style={styles.reExplainBtn}
-            >
-              <Text style={styles.reExplainText}>↺ Explain differently</Text>
-            </TouchableOpacity>
+          {isLastAssistant && !item.pending && !item.quiz && (
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                onPress={explainDifferently}
+                style={styles.actionBtn}
+              >
+                <Text style={styles.actionBtnText}>↺ Explain differently</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleQuizMe(item.id, item.content)}
+                style={[styles.actionBtn, styles.actionBtnQuiz]}
+                disabled={isQuizLoading}
+              >
+                {isQuizLoading ? (
+                  <ActivityIndicator size='small' color={INDIGO} />
+                ) : (
+                  <Text style={[styles.actionBtnText, { color: INDIGO }]}>
+                    🧩 Quiz me
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </View>
@@ -525,13 +680,63 @@ export function ChatScreen({ navigation, route }: Props) {
   );
 }
 
-const INDIGO_BG = '#EEF2FF';
+// Quiz card styles
+const quizStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#EEEEF0',
+    shadowColor: INDIGO,
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  header: { fontSize: 14, fontWeight: '800', color: TEXT_HI, marginBottom: 12 },
+  questionBlock: { marginBottom: 14 },
+  questionText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: TEXT_HI,
+    marginBottom: 8,
+    lineHeight: 19,
+  },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 6,
+    borderWidth: 1.5,
+  },
+  optionLabel: { fontSize: 12, fontWeight: '800', width: 18 },
+  optionText: { fontSize: 12, flex: 1, lineHeight: 17 },
+  tick: { fontSize: 14, color: '#10B981' },
+  cross: { fontSize: 14, color: '#EF4444' },
+  explanation: {
+    fontSize: 11,
+    color: TEXT_LO,
+    marginTop: 6,
+    lineHeight: 16,
+    fontStyle: 'italic',
+  },
+  scoreRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#EEEEF0',
+    paddingTop: 10,
+    marginTop: 4,
+    alignItems: 'center',
+  },
+  scoreText: { fontSize: 14, fontWeight: '800', color: INDIGO },
+});
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
   list: { padding: 16, paddingBottom: 8, gap: 4 },
 
-  // Header
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -549,15 +754,13 @@ const styles = StyleSheet.create({
   },
   clearBtnText: { fontSize: 12, color: TEXT_LO, fontWeight: '600' },
 
-  // Deep thinking banner
   deepThinkingBanner: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: INDIGO_BG ?? '#EEF2FF',
+    backgroundColor: INDIGO_BG,
   },
   deepThinkingText: { fontSize: 12, fontWeight: '600', color: INDIGO_DK },
 
-  // Message layout
   messageGroup: { marginBottom: 8 },
   messageGroupUser: { alignItems: 'flex-end' },
   messageGroupAssistant: { alignItems: 'flex-start' },
@@ -565,7 +768,6 @@ const styles = StyleSheet.create({
   rowUser: { justifyContent: 'flex-end' },
   rowAssistant: { justifyContent: 'flex-start' },
 
-  // Avatar
   avatar: {
     width: 32,
     height: 32,
@@ -576,17 +778,13 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
-  // Bubbles
   bubble: {
     maxWidth: '78%',
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  bubbleUser: {
-    backgroundColor: INDIGO,
-    borderBottomRightRadius: 4,
-  },
+  bubbleUser: { backgroundColor: INDIGO, borderBottomRightRadius: 4 },
   bubbleAssistant: {
     backgroundColor: '#FFFFFF',
     borderBottomLeftRadius: 4,
@@ -609,7 +807,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Thinking accordion
   thinkingHeader: {
     paddingVertical: 6,
     marginBottom: 4,
@@ -635,7 +832,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // Model badge
   modelBadge: {
     alignSelf: 'flex-start',
     backgroundColor: SURFACE,
@@ -648,21 +844,29 @@ const styles = StyleSheet.create({
   modelBadgeText: { fontSize: 11, color: TEXT_LO, fontWeight: '600' },
   modelBadgeTextFallback: { color: '#92400E' },
 
-  // Below bubble
+  quizWrapper: {
+    marginTop: 8,
+    width: '90%',
+    alignSelf: 'flex-start',
+    marginLeft: 40,
+  },
+
   belowBubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginTop: 3,
+    gap: 8,
+    marginTop: 4,
     paddingHorizontal: 4,
   },
   belowBubbleUser: { justifyContent: 'flex-end' },
   belowBubbleAssistant: { marginLeft: 40 },
   timestamp: { fontSize: 11, color: TEXT_LO },
-  reExplainBtn: { paddingVertical: 2 },
-  reExplainText: { fontSize: 12, fontWeight: '600', color: INDIGO },
 
-  // Typing
+  actionRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  actionBtn: { paddingVertical: 3, paddingHorizontal: 2 },
+  actionBtnQuiz: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  actionBtnText: { fontSize: 12, fontWeight: '600', color: INDIGO },
+
   typingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -672,7 +876,6 @@ const styles = StyleSheet.create({
   },
   typingText: { fontSize: 13, fontWeight: '500', color: INDIGO },
 
-  // Input
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -706,13 +909,12 @@ const styles = StyleSheet.create({
   sendBtnDisabled: { opacity: 0.35 },
   sendIcon: { color: '#fff', fontSize: 20, fontWeight: '700' },
 
-  // Empty state
   empty: { flex: 1, alignItems: 'center', paddingTop: 80, gap: 10 },
   emptyIconBox: {
     width: 72,
     height: 72,
     borderRadius: 22,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: INDIGO_BG,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
