@@ -14,7 +14,7 @@ Powerful AI tutors exist — but they require stable internet, a modern device, 
 
 **EduReach is built for the students that current AI tools leave behind.**
 
----
+<!-- --- -->
 
 <!-- ## App Preview -->
 
