@@ -10,7 +10,7 @@ Built for the [Gemma 4 Good Hackathon](https://www.kaggle.com/competitions/gemma
 
 ## App Preview
 
-<!-- 📹 **Demo Video:** _coming soon_ -->
+📹 **Demo Video:** https://www.youtube.com/watch?v=wgvaXzi2Awg
 
 ### Home Screen
 
