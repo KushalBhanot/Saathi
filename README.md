@@ -10,11 +10,28 @@ Built for the [Gemma 4 Good Hackathon](https://www.kaggle.com/competitions/gemma
 
 ## App Preview
 
-| Home Screen | Chat | Quiz Me |
-| ----------- | ---- | ------- |
-|             |      |         |
-
 <!-- 📹 **Demo Video:** _coming soon_ -->
+
+### Home Screen
+
+<p float="left">
+  <img src="assets/screenshots/home_1.png" width="30%" />
+  <img src="assets/screenshots/home_2.png" width="30%" />
+</p>
+
+### Chat
+
+<p float="left">
+  <img src="assets/screenshots/chat_1.png" width="30%" />
+  <img src="assets/screenshots/chat_2.png" width="30%" />
+</p>
+
+### Quiz Me
+
+<p float="left">
+  <img src="assets/screenshots/quiz_1.png" width="30%" />
+  <img src="assets/screenshots/quiz_2.png" width="30%" />
+</p>
 
 ---
 
